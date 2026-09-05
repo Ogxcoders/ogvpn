@@ -1,4 +1,6 @@
 import { generateWgKeypair } from '../keys';
+import { isDemoMode } from '../demoState';
+import { demoApiRequest, DemoHttpError } from './DemoBackend';
 import type {
   AuthIdentity,
   CreatePeerResult,
@@ -87,6 +89,19 @@ export class AegisApi {
     body?: unknown,
     opts: { auth?: boolean; retried?: boolean } = {},
   ): Promise<T> {
+    // Offline demo mode: answered locally by DemoBackend — no network, no
+    // tokens, identical UI paths. Must come before any fetch/refresh logic.
+    if (isDemoMode()) {
+      try {
+        return await demoApiRequest<T>(method, path, body);
+      } catch (e) {
+        if (e instanceof DemoHttpError) {
+          throw new ApiError(e.status, e.code, e.message);
+        }
+        throw e;
+      }
+    }
+
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (opts.auth !== false) {

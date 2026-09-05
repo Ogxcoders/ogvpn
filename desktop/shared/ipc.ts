@@ -231,6 +231,10 @@ export interface AegisBridge {
   setSetting(key: SettingKey, value: boolean | string): Promise<SettingsMap>;
   getSetting(key: SettingKey): Promise<boolean | string | null>;
   getAllSettings(): Promise<SettingsMap>;
+  /** Offline demo mode: label honestly, no real tunnel behind it. */
+  demoEnable(): Promise<boolean>;
+  demoDisable(): Promise<boolean>;
+  demoStatus(): Promise<boolean>;
   getDiagnostics(): Promise<DiagnosticsReport>;
 }
 
@@ -255,6 +259,9 @@ export const IPC_CHANNELS = {
   settingsSet: 'settings:set',
   settingsGet: 'settings:get',
   settingsAll: 'settings:all',
+  demoEnable: 'demo:enable',
+  demoDisable: 'demo:disable',
+  demoStatus: 'demo:status',
   diagnosticsGet: 'diagnostics:get'
 } as const;
 

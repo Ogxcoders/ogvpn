@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { AegisApi, DEFAULT_API_BASE_URL } from './api/AegisApi';
 import { TokenStore } from './api/TokenStore';
+import { isDemoMode, loadDemoMode, setDemoMode } from './demoState';
 import { SettingsStore } from './lib/SettingsStore';
 import { VpnController } from './vpn/VpnController';
 import { UpdateService } from './update/UpdateService';
@@ -192,12 +193,26 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.subscriptionCheckout, (_e, planCode: 'free' | 'premium') => controller.api.checkout(planCode));
   ipcMain.handle(IPC_CHANNELS.settingsSet, (_e, key: keyof SettingsMap, value: boolean | string) => controller.setSetting(key, value));
   ipcMain.handle(IPC_CHANNELS.settingsAll, () => controller.getSettings());
+  // Demo mode: enable → flag only (renderer signs in next via demo login);
+  // disable → log out FIRST while demo is still on (no network), then flag.
+  ipcMain.handle(IPC_CHANNELS.demoEnable, () => {
+    setDemoMode(true);
+    return true;
+  });
+  ipcMain.handle(IPC_CHANNELS.demoDisable, async () => {
+    await controller.disconnect().catch(() => undefined);
+    await controller.api.logout().catch(() => undefined);
+    setDemoMode(false);
+    return true;
+  });
+  ipcMain.handle(IPC_CHANNELS.demoStatus, () => isDemoMode());
   ipcMain.handle(IPC_CHANNELS.diagnosticsGet, () => controller.diagnostics());
 }
 
 /* ---------- app lifecycle ---------- */
 
 app.whenReady().then(() => {
+  loadDemoMode(app.getPath('userData'));
   const tokens = new TokenStore();
   tokens.load();
   const defaults: SettingsMap = {

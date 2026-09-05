@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { AegisApi, DEFAULT_API_BASE_URL, ApiError, platformName } from '../api/AegisApi';
 import { TokenStore } from '../api/TokenStore';
+import { isDemoMode } from '../demoState';
 import { EventStream, type StreamEvent } from '../sse/EventStream';
 import { buildWgQuickConf, ConfBuildError } from './buildConf';
 import { createAdapterForPlatform, type AdapterStatus, type WireGuardAdapter } from './adapters';
@@ -171,6 +172,13 @@ export class VpnController {
       this.machine.tryTransition('AUTH_REQUIRED');
       throw new ApiError(401, 'UNAUTHORIZED', 'Sign in first');
     }
+    // Demo mode: simulate the whole sequence — no WireGuard tooling, no
+    // system interface, no traffic. Same state machine, honest failure for
+    // maintenance/offline servers.
+    if (isDemoMode()) {
+      await this.connectDemo(serverId);
+      return;
+    }
     const available = await this.adapter.isAvailable();
     if (!available) {
       this.machine.tryTransition('CONFIGURATION_ERROR');
@@ -203,6 +211,39 @@ export class VpnController {
       return;
     }
     await this.connect(candidates[0]!.id);
+  }
+
+  /**
+   * DEMO connect: drives the real state machine (PREPARING → CONNECTING →
+   * HANDSHAKING → CONNECTED) against the in-memory demo dataset without
+   * touching the platform adapter, the kill switch or the network. The
+   * snapshot is marked by the UI via the Settings demo badge.
+   */
+  private async connectDemo(serverId: string): Promise<void> {
+    this.machine.tryTransition('PREPARING');
+    const servers = await this.api.listServers();
+    const server = servers.find((s) => s.id === serverId);
+    if (!server) {
+      this.machine.tryTransition('ERROR');
+      throw new ApiError(404, 'NOT_FOUND', 'Server not found');
+    }
+    if (server.status !== 'active') {
+      this.machine.tryTransition('SERVER_UNAVAILABLE');
+      this.recordError(`Demo server ${server.name} is ${server.status} — pick another`);
+      throw new ApiError(503, 'SERVER_UNAVAILABLE', `Server is ${server.status}`);
+    }
+    this.server = server;
+    this.machine.tryTransition('CONNECTING');
+    const { tunnel } = await this.api.createPeer(serverId, this.identity!.device.id);
+    this.tunnel = tunnel as TunnelWithKey;
+    this.machine.tryTransition('HANDSHAKING');
+    this.publishSnapshot();
+    await sleep(600);
+    this.machine.tryTransition('CONNECTED');
+    this.handshakeAgoSec = 0;
+    this.connectedSince = new Date().toISOString();
+    this.reconnectAttempts = 0;
+    this.publishSnapshot();
   }
 
   private async provisionTunnel(serverId: string): Promise<void> {
@@ -293,12 +334,17 @@ export class VpnController {
   }
 
   private async teardownTunnel(): Promise<void> {
-    if (this.killSwitch.isActive()) {
-      await this.killSwitch.remove().catch(() => undefined);
-      this.killSwitchActive = false;
+    // Demo mode: nothing was applied to the system — just drop local state.
+    if (!isDemoMode()) {
+      if (this.killSwitch.isActive()) {
+        await this.killSwitch.remove().catch(() => undefined);
+        this.killSwitchActive = false;
+      }
+      if (this.tunnel) {
+        await this.adapter.down().catch(() => undefined);
+      }
     }
     if (this.tunnel) {
-      await this.adapter.down().catch(() => undefined);
       await this.api.deletePeer(this.tunnel.id).catch(() => undefined);
       this.tunnel = null;
     }
@@ -324,6 +370,11 @@ export class VpnController {
 
   private async monitorOnce(): Promise<void> {
     if (this.machine.state === 'CONNECTED' && this.tunnel) {
+      // Demo mode: no real handshake to watch; just refresh the duration.
+      if (isDemoMode()) {
+        this.publishSnapshot();
+        return;
+      }
       const st = await this.adapter.status().catch(() => null);
       if (st) {
         this.lastStatus = st;

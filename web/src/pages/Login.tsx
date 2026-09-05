@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ApiError } from '../api/client';
+import { ApiError, DEMO_EMAIL, DEMO_PASSWORD, enableDemoMode, isDemoMode } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { emailError } from '../lib/validation';
 import { Icon } from '../components/Icon';
@@ -55,6 +55,26 @@ export default function Login() {
       } else {
         setFormError('Sign-in failed. Check your connection and try again.');
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Offline demo mode: flips the local demo flag (all API calls are then
+   * answered by the in-app demo backend) and signs in with the demo fixture.
+   * No server required; the UI paths are identical to real mode.
+   */
+  const onDemo = async () => {
+    setFormError(null);
+    setFieldErrors({});
+    setBusy(true);
+    enableDemoMode();
+    try {
+      await login({ email: email.trim() || DEMO_EMAIL, password: password || DEMO_PASSWORD });
+      navigate(from, { replace: true });
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : 'Demo sign-in failed.');
     } finally {
       setBusy(false);
     }
@@ -127,6 +147,31 @@ export default function Login() {
         <div className="auth-foot">
           No account yet? <Link to="/register">Create one</Link>
         </div>
+
+        {isDemoMode() ? null : (
+          <div style={{ marginTop: '1rem' }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ width: '100%' }}
+              disabled={busy}
+              onClick={() => void onDemo()}
+            >
+              Explore demo mode (offline)
+            </button>
+            <p
+              style={{
+                margin: '0.5rem 0 0',
+                fontSize: '0.8rem',
+                color: 'var(--text-muted, #8a8f98)',
+                textAlign: 'center',
+              }}
+            >
+              Sample servers, devices and sessions — no account or backend needed.
+              Demo data only; no real VPN tunnel.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

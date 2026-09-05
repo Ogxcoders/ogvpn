@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, clearTokens, disableDemoMode, isDemoMode } from '../api/client';
 import type { NotificationsResponse } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 import { useApi } from '../lib/useApi';
@@ -136,6 +136,7 @@ function NotificationsDrawer({ onClose }: { onClose: () => void }) {
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const demo = isDemoMode();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -207,6 +208,36 @@ export function Layout() {
           </span>
           AegisVPN
         </div>
+        {demo ? (
+          <div
+            style={{
+              margin: '0 1rem 0.25rem',
+              padding: '0.45rem 0.6rem',
+              borderRadius: 8,
+              border: '1px dashed currentColor',
+              fontSize: '0.78rem',
+              lineHeight: 1.35,
+            }}
+            role="status"
+          >
+            <strong>DEMO MODE</strong>
+            <br />
+            Offline sample data — no real VPN tunnel or traffic protection.
+            {' '}
+            <a
+              href="/login"
+              style={{ fontWeight: 600 }}
+              onClick={(e) => {
+                e.preventDefault();
+                disableDemoMode();
+                clearTokens();
+                window.location.href = '/login';
+              }}
+            >
+              Exit demo
+            </a>
+          </div>
+        ) : null}
         <nav className="nav" aria-label="Main navigation">
           {NAV_ITEMS.filter((item) => item.to !== '/admin' || isAdmin).map((item) => (
             <NavLink

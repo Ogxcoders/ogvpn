@@ -4,10 +4,20 @@ import { aegis, type SettingsMap } from '../lib/bridge';
 export function Settings(): React.ReactElement {
   const [settings, setSettings] = useState<SettingsMap | null>(null);
   const [saving, setSaving] = useState(false);
+  const [demo, setDemo] = useState(false);
 
   useEffect(() => {
     void aegis().getAllSettings().then(setSettings);
+    void aegis().demoStatus().then(setDemo);
   }, []);
+
+  const exitDemo = async (): Promise<void> => {
+    await aegis().demoDisable();
+    setDemo(false);
+    // Full reload re-resolves auth: the demo session is cleared, the app
+    // returns to the real login screen.
+    window.location.reload();
+  };
 
   const set = async (key: keyof SettingsMap, value: boolean | string): Promise<void> => {
     setSaving(true);
@@ -22,6 +32,19 @@ export function Settings(): React.ReactElement {
 
   return (
     <div>
+      {demo ? (
+        <div className="card" role="status" style={{ borderColor: 'var(--primary)' }}>
+          <h2>Mode: DEMO (offline)</h2>
+          <p className="muted">
+            The UI runs against in-memory sample data. The VPN tunnel is
+            <strong> simulated</strong> — no traffic is routed or protected.
+            Exit demo mode to sign in to a real control plane.
+          </p>
+          <button className="btn btn-primary" type="button" onClick={() => void exitDemo()}>
+            Exit demo mode
+          </button>
+        </div>
+      ) : null}
       <div className="card">
         <h2>VPN behavior</h2>
         <Toggle

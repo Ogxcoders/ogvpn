@@ -26,6 +26,8 @@ export interface Tokens {
   refreshToken: string;
 }
 
+import { demoRequest, isDemoMode } from './demoMode';
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -44,6 +46,8 @@ export const ACCESS_TOKEN_KEY = 'aegis.access';
 export const REFRESH_TOKEN_KEY = 'aegis.refresh';
 /** Dispatched (as CustomEvent) whenever the session is logged out by the client. */
 export const SESSION_EXPIRED_EVENT = 'aegis:session-expired';
+
+export { isDemoMode, enableDemoMode, disableDemoMode, DEMO_EMAIL, DEMO_PASSWORD } from './demoMode';
 
 /** Same origin by default; overridable at build time. */
 export const baseURL: string = import.meta.env?.VITE_API_BASE ?? '';
@@ -177,6 +181,18 @@ async function doRefresh(refreshToken: string): Promise<void> {
 /* ---------- Core request ---------- */
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  // Offline demo mode: every call is answered locally by the demo backend
+  // (web/src/api/demoMode.ts) — no network, no tokens, identical UI paths.
+  if (isDemoMode()) {
+    try {
+      return await demoRequest<T>(opts.method ?? 'GET', path, opts.body);
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      const err = e as { status?: number; code?: string; message?: string };
+      throw new ApiError(err.status ?? 500, err.code ?? 'SERVER_ERROR', err.message ?? 'Demo backend failure');
+    }
+  }
+
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = { ...opts.headers };
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';

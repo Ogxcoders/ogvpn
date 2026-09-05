@@ -43,3 +43,21 @@ dist/ folder servable by anything. Documented in TECH-DECISIONS.md.
   bounds the blast radius; httpOnly-cookie upgrade path noted in client.ts).
 - No tokens or secrets are rendered or logged.
 - Admin area is role-gated in the router AND enforced server-side.
+
+## Offline demo mode (no backend needed)
+
+The login screen has **"Explore demo mode (offline)"**. Tapping it flips the
+local demo flag (`localStorage: aegis.demo`): every `/api/v1` call is then
+answered by `src/api/demoMode.ts` — a tiny in-memory backend that mirrors
+`backend/seed/demo.ts` (same 7-server matrix, plans, devices, sessions) and
+returns real contract types, so the UI code paths are identical in demo and
+real mode.
+
+What works: login/register, dashboard, servers (incl. maintenance/offline/
+drain/IPv4-only), devices (rename/revoke with honest 409 on the current
+device), sessions, subscription checkout/cancel (marked `simulatedPayment`),
+support tickets.
+
+What is honestly NOT real: no server, no WireGuard tunnel, no traffic
+protection, no admin area (contract-faithful 403). A "DEMO MODE" banner in
+the sidebar stays visible with an "Exit demo" action.

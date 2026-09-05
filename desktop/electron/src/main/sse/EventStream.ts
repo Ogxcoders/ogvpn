@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { isDemoMode } from '../demoState';
 
 /**
  * Server-Sent Events client for the backend event bus (GET /events).
@@ -46,6 +47,9 @@ export class EventStream extends EventEmitter {
 
   start(): void {
     if (this.closed || this.controller) return;
+    // Demo mode has no control plane to stream from: park permanently until
+    // stop()+start() are re-issued after demo mode is switched off.
+    if (isDemoMode()) return;
     this.open();
   }
 

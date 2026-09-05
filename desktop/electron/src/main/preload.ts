@@ -36,6 +36,9 @@ const bridge: AegisBridge = {
   setSetting: (key, value) => ipcRenderer.invoke(IPC_CHANNELS.settingsSet, key, value),
   getSetting: (key) => ipcRenderer.invoke(IPC_CHANNELS.settingsGet, key),
   getAllSettings: () => ipcRenderer.invoke(IPC_CHANNELS.settingsAll),
+  demoEnable: () => ipcRenderer.invoke(IPC_CHANNELS.demoEnable),
+  demoDisable: () => ipcRenderer.invoke(IPC_CHANNELS.demoDisable),
+  demoStatus: () => ipcRenderer.invoke(IPC_CHANNELS.demoStatus),
   getDiagnostics: () => ipcRenderer.invoke(IPC_CHANNELS.diagnosticsGet),
 };
 

@@ -73,3 +73,20 @@ otherwise would fake a security feature). Wire it in three steps: see
   template icon in dev and falls back gracefully.
 - `close to tray` keeps the VPN up when the window closes; Quit lives in the
   tray menu and the app menu.
+
+## Offline demo mode (no backend needed)
+
+The login screen has **"Explore demo mode (offline)"**. It flips a
+main-process flag (`electron/src/main/demoState.ts`, persisted in
+`userData/demo-mode.json`): every control-plane call is answered by
+`electron/src/main/api/DemoBackend.ts`, and `VpnController` drives the real
+state machine (PREPARING → CONNECTING → HANDSHAKING → CONNECTED) without
+touching WireGuard tooling, the kill switch or the network.
+
+What works: login, servers, connect/disconnect (maintenance/offline servers
+honestly fail with SERVER_UNAVAILABLE), devices, sessions, subscription.
+
+What is honestly NOT real: no backend, no tunnel interface, no traffic
+protection. Settings shows a permanent "Mode: DEMO (offline)" card with an
+"Exit demo mode" action (logs out of the demo session first, then flips the
+flag — no real network call is made in demo mode at any point).

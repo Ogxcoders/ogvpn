@@ -75,7 +75,42 @@ export function Login({ onAuthenticated }: { onAuthenticated: (i: AuthIdentity) 
             <>Already registered? <a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setFieldErrors({}); }}>Sign in</a></>
           )}
         </div>
+
+        <hr style={{ border: 'none', borderTop: '1px solid var(--border, #2a2f3a)', margin: '16px 0' }} />
+        <button
+          className="btn btn-ghost"
+          type="button"
+          disabled={busy}
+          style={{ width: '100%' }}
+          onClick={() => void enterDemo()}
+        >
+          Explore demo mode (offline)
+        </button>
+        <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12, textAlign: 'center' }}>
+          Sample servers, devices and VPN states — no account, backend or
+          WireGuard tooling needed. The tunnel is simulated; no traffic is routed.
+        </p>
       </div>
     </div>
   );
+
+  /**
+   * Offline demo mode: flips the main-process demo flag (all API calls are
+   * then answered locally) and signs in with the documented demo fixture.
+   */
+  async function enterDemo(): Promise<void> {
+    setFormError(null);
+    setFieldErrors({});
+    setBusy(true);
+    try {
+      await aegis().demoEnable();
+      const result: LoginResult = await aegis().login({ email: 'demo@aegisvpn.local', password: 'DemoPass123' });
+      const identity = await aegis().me();
+      onAuthenticated(identity ?? { user: result.user, device: result.device, subscription: result.subscription });
+    } catch (err) {
+      setFormError((err as Error).message || 'Demo sign-in failed');
+    } finally {
+      setBusy(false);
+    }
+  }
 }
