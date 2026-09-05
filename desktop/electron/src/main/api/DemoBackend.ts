@@ -15,7 +15,6 @@
  *  - mutations (rename, revoke, checkout, cancel) mutate this dataset live.
  */
 import type {
-  DeviceInfo,
   DeviceSummary,
   PlanInfo,
   ServerInfo,
@@ -23,7 +22,7 @@ import type {
   SubscriptionInfo,
   TunnelInfo,
   UserProfile,
-} from '../../../shared/ipc';
+} from '../../../../shared/ipc';
 import { isDemoMode } from '../demoState';
 
 export const DEMO_EMAIL = 'demo@aegisvpn.local';
@@ -234,12 +233,13 @@ export async function demoApiRequest<T>(
   await latency();
 
   const segs = path.replace(/^\//, '').split('/');
-  const [root, second] = segs;
+  const root = segs[0] ?? '';
+  const action = segs[1] ?? '';
 
   switch (`${method} ${root}`) {
     /* ---- auth ---- */
-    case 'POST auth/login':
-    case 'POST auth/register': {
+    case 'POST auth': {
+      if (action !== 'login' && action !== 'register') break;
       const req = (body ?? {}) as { email?: string; deviceName?: string; platform?: string; name?: string };
       user.email = req.email?.trim() || DEMO_EMAIL;
       if (req.name?.trim()) user.name = req.name.trim();
@@ -252,9 +252,11 @@ export async function demoApiRequest<T>(
         refreshToken: `demo-refresh-${nextId('tok')}`,
       } as T;
     }
-    case 'POST auth/logout':
+    case 'POST auth':
+      if (action !== 'logout') break;
       return undefined as T;
-    case 'GET auth/me':
+    case 'GET auth':
+      if (action !== 'me') break;
       return demoMe() as T;
 
     /* ---- servers ---- */
@@ -266,18 +268,18 @@ export async function demoApiRequest<T>(
       return { devices: devices.map((d) => ({ ...d })) } as T;
     case 'PATCH devices': {
       const req = (body ?? {}) as { name?: string };
-      const dev = devices.find((d) => d.id === second);
-      if (!dev) throw new DemoHttpError(404, 'NOT_FOUND', `No device '${second}' in demo data`);
+      const dev = devices.find((d) => d.id === action);
+      if (!dev) throw new DemoHttpError(404, 'NOT_FOUND', `No device '${action}' in demo data`);
       dev.name = req.name?.trim() || dev.name;
       dev.lastActiveAt = iso();
       return { device: { id: dev.id, name: dev.name, platform: dev.platform, status: 'active' as const, lastActiveAt: dev.lastActiveAt } } as T;
     }
     case 'DELETE devices': {
-      if (second === currentDeviceId) {
+      if (action === currentDeviceId) {
         throw new DemoHttpError(409, 'VALIDATION_ERROR', 'Cannot revoke the device you are using');
       }
-      const idx = devices.findIndex((d) => d.id === second);
-      if (idx < 0) throw new DemoHttpError(404, 'NOT_FOUND', `No device '${second}' in demo data`);
+      const idx = devices.findIndex((d) => d.id === action);
+      if (idx < 0) throw new DemoHttpError(404, 'NOT_FOUND', `No device '${action}' in demo data`);
       devices.splice(idx, 1);
       return undefined as T;
     }
@@ -287,7 +289,8 @@ export async function demoApiRequest<T>(
       return { sessions: sessions.map((s) => ({ ...s })) } as T;
 
     /* ---- vpn peers ---- */
-    case 'POST vpn/peers': {
+    case 'POST vpn': {
+      if (action !== 'peers') break;
       const req = (body ?? {}) as { deviceId?: string; serverId?: string };
       const server = servers.find((s) => s.id === req.serverId);
       if (!server) throw new DemoHttpError(404, 'NOT_FOUND', `No server '${req.serverId}' in demo data`);
@@ -322,8 +325,9 @@ export async function demoApiRequest<T>(
       });
       return { tunnel } as T;
     }
-    case 'DELETE vpn/peers': {
-      const id = second;
+    case 'DELETE vpn': {
+      if (action !== 'peers') break;
+      const id = segs[2];
       const idx = tunnels.findIndex((t) => t.id === id);
       if (idx >= 0) {
         const t = tunnels[idx]!;
@@ -340,10 +344,14 @@ export async function demoApiRequest<T>(
 
     /* ---- subscription ---- */
     case 'GET subscription':
+      if (action === 'plans') return { plans: plans.map((p) => ({ ...p })) } as T;
       return { subscription: { ...subscription } } as T;
-    case 'GET subscription/plans':
-      return { plans: plans.map((p) => ({ ...p })) } as T;
-    case 'POST subscription/checkout': {
+    case 'POST subscription': {
+      if (action !== 'checkout' && action !== 'cancel') break;
+      if (action === 'cancel') {
+        subscription = { plan: 'free', status: 'active', currentPeriodEnd: null, maxDevices: 2 };
+        return { subscription: { ...subscription } } as T;
+      }
       const req = (body ?? {}) as { planCode?: string };
       const plan = plans.find((p) => p.code === req.planCode);
       if (!plan) throw new DemoHttpError(404, 'NOT_FOUND', `No plan '${req.planCode}' in demo data`);
@@ -355,14 +363,11 @@ export async function demoApiRequest<T>(
       };
       return { subscription: { ...subscription } } as T;
     }
-    case 'POST subscription/cancel':
-      subscription = { plan: 'free', status: 'active', currentPeriodEnd: null, maxDevices: 2 };
-      return { subscription: { ...subscription } } as T;
-
     default:
-      if (root === 'admin') {
-        throw new DemoHttpError(403, 'FORBIDDEN', 'Admin area is not part of the demo dataset');
-      }
-      throw new DemoHttpError(404, 'NOT_FOUND', `No demo handler for ${method} ${path}`);
+      break;
   }
+  if (root === 'admin') {
+    throw new DemoHttpError(403, 'FORBIDDEN', 'Admin area is not part of the demo dataset');
+  }
+  throw new DemoHttpError(404, 'NOT_FOUND', `No demo handler for ${method} ${path}`);
 }

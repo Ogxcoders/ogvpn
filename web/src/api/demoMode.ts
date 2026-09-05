@@ -263,13 +263,15 @@ export async function demoRequest<T>(
   await latency();
 
   const segs = path.replace(/^\//, '').split('/');
-  const [root, second] = segs;
+  const root = segs[0] ?? '';
+  const action = segs[1] ?? '';
 
   try {
     switch (`${method} ${root}`) {
       /* ---- auth ---- */
-      case 'POST auth/login':
-      case 'POST auth/register': {
+      case 'POST auth': {
+        if (action !== 'login' && action !== 'register' && action !== 'logout') break;
+        if (action === 'logout') return undefined as T;
         const req = (body ?? {}) as { email?: string; password?: string; name?: string };
         // Demo accepts any well-formed input; the fixture identity is used
         // for empty fields so "Explore demo mode" can sign in directly.
@@ -285,20 +287,20 @@ export async function demoRequest<T>(
           ...fakeTokens(),
         } satisfies AuthSuccessResponse as T);
       }
-      case 'GET auth/me':
+      case 'GET auth': {
+        if (action !== 'me') break;
         return jsonOk({
           user: userPayload(),
           subscription,
           device: authDevicePayload(),
         } satisfies MeResponse as T);
-      case 'POST auth/logout':
-        return undefined as T;
+      }
 
       /* ---- devices ---- */
       case 'GET devices':
         return jsonOk({ devices: devices.map((d) => ({ ...d })) } as T);
       case 'PATCH devices': {
-        const id = segs[1];
+        const id = action;
         const req = (body ?? {}) as { name?: string };
         const device = devices.find((d) => d.id === id);
         if (!device) throw new DemoError(404, 'NOT_FOUND', `No device '${id}' in demo data`);
@@ -308,7 +310,7 @@ export async function demoRequest<T>(
         return jsonOk({ device: { ...device } } as T);
       }
       case 'DELETE devices': {
-        const id = segs[1];
+        const id = action;
         if (id === currentDevice.id) {
           throw new DemoError(409, 'VALIDATION_ERROR', 'Cannot revoke the device you are using');
         }
@@ -326,7 +328,7 @@ export async function demoRequest<T>(
       case 'GET sessions':
         return jsonOk({ sessions: sessions.map((s) => ({ ...s })) } as T);
       case 'DELETE sessions': {
-        const id = segs[1];
+        const id = action;
         const session = sessions.find((s) => s.id === id && s.state !== 'closed');
         if (session) {
           session.state = 'closed';
@@ -337,10 +339,14 @@ export async function demoRequest<T>(
 
       /* ---- subscription ---- */
       case 'GET subscription':
+        if (action === 'plans') return jsonOk({ plans: plans.map((p) => ({ ...p })) } as T);
         return jsonOk({ subscription } as T);
-      case 'GET subscription/plans':
-        return jsonOk({ plans: plans.map((p) => ({ ...p })) } as T);
-      case 'POST subscription/checkout': {
+      case 'POST subscription': {
+        if (action !== 'checkout' && action !== 'cancel') break;
+        if (action === 'cancel') {
+          subscription = { plan: 'free', status: 'active', currentPeriodEnd: null, maxDevices: 2 };
+          return jsonOk({ subscription } as T);
+        }
         const req = (body ?? {}) as { planCode?: PlanCode };
         const plan = plans.find((p) => p.code === req.planCode);
         if (!plan) throw new DemoError(404, 'NOT_FOUND', `No plan '${req.planCode}' in demo data`);
@@ -353,14 +359,10 @@ export async function demoRequest<T>(
         };
         return jsonOk({ subscription } as T);
       }
-      case 'POST subscription/cancel':
-        subscription = { plan: 'free', status: 'active', currentPeriodEnd: null, maxDevices: 2 };
-        return jsonOk({ subscription } as T);
-
       /* ---- support ---- */
       case 'GET tickets': {
-        const id = segs[1];
-        if (id) {
+        if (action) {
+          const id = action;
           const ticket = tickets.find((t) => t.id === id);
           if (!ticket) return undefined as T;
           return jsonOk({
@@ -387,6 +389,7 @@ export async function demoRequest<T>(
       case 'GET notifications':
         return jsonOk({ notifications: [] } as T);
       case 'PATCH notifications':
+        if (action !== 'read') break;
         return undefined as T;
 
       /* ---- admin (demo user is not an admin: contract-faithful 403) ---- */
@@ -400,6 +403,7 @@ export async function demoRequest<T>(
     if (e instanceof DemoError) throw e;
     throw new DemoError(500, 'SERVER_ERROR', `Demo backend failure: ${(e as Error).message}`);
   }
+  throw new DemoError(404, 'NOT_FOUND', `No demo handler for ${method} ${path}`);
 }
 
 /** Second segment disambiguation for tickets (list vs thread) lives above. */
