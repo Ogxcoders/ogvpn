@@ -1,0 +1,34 @@
+# --- Node ---
+node_modules/
+*.log
+npm-debug.log*
+.eslintcache
+
+# --- Builds (CI rebuilds these from source) ---
+.next/
+out/
+dist/
+release/
+*.tsbuildinfo
+
+# --- Android / Gradle ---
+.gradle/
+build/
+local.properties
+captures/
+*.jks
+*.keystore
+
+# --- Env & secrets (never commit real values) ---
+.env
+.env.*
+!.env.example
+
+# --- Databases (regenerate: backend `npm run seed:demo`, platform `npm run db:push`) ---
+backend/data/*.db
+*.sqlite
+*.sqlite3
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db

@@ -1,0 +1,44 @@
+appId: com.aegisvpn.desktop
+productName: AegisVPN
+copyright: Copyright © 2025 AegisVPN
+
+directories:
+  output: release
+
+files:
+  - dist/**
+  - package.json
+
+# Nothing sensitive ships as an extra resource: keys are generated on-device
+# and live in the OS-protected user data directory, never in the app bundle.
+extraResources: []
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: AegisVPN
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.utilities
+  identity: null
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Network
+  executableName: aegisvpn

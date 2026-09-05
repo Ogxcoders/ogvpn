@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android APK/AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Build debug APK, release APK, AAB
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug :app:assembleRelease :app:bundleRelease
+      - name: Collect + checksum artifacts
+        run: |
+          set -eux
+          mkdir -p ../rel
+          find app/build/outputs -name "*.apk" -exec cp {} ../rel/ \;
+          find app/build/outputs -name "*.aab" -exec cp {} ../rel/ \;
+          cd ../rel && sha256sum * > SHA256SUMS.txt && ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: rel/**
+          if-no-files-found: error
+
+  desktop:
+    name: Desktop installers — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --publish never
+      - name: Collect + checksum artifacts
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p ../rel
+          cp release/*.exe ../rel/ 2>/dev/null || true
+          cp release/*.dmg ../rel/ 2>/dev/null || true
+          cp release/*.AppImage ../rel/ 2>/dev/null || true
+          cp release/*.deb ../rel/ 2>/dev/null || true
+          cd ../rel && sha256sum * > SHA256SUMS.txt || true && ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-desktop-${{ matrix.os }}
+          path: rel/**
+          if-no-files-found: error
+
+  extension:
+    name: Chrome extension ZIP
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cd extension
+          zip -qr ../ogvpn-extension-${{ github.ref_name }}.zip .
+          cd .. && unzip -t "ogvpn-extension-${{ github.ref_name }}.zip" > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-extension
+          path: ogvpn-extension-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [android, desktop, extension]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: rel
+      - name: List release payload
+        run: ls -la rel
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            rel/*.apk
+            rel/*.aab
+            rel/*.exe
+            rel/*.dmg
+            rel/*.AppImage
+            rel/*.deb
+            rel/*.zip
+            rel/SHA256SUMS.txt

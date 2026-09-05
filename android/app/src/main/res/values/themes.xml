@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Framework Material theme: no ActionBar (Compose draws everything).
+         The dark window background matches the app's background color to avoid
+         a white flash before the first Compose frame. -->
+    <style name="Theme.AegisVPN" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0B1220</item>
+        <item name="android:statusBarColor">#FF0B1220</item>
+        <item name="android:navigationBarColor">#FF0B1220</item>
+    </style>
+</resources>

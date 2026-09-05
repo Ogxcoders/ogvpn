@@ -1,0 +1,260 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checklist:
+    name: Checklist integrity (3,754 items)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate master checklist JSON
+        run: python tools/validate_checklist.py
+
+  backend:
+    name: Backend API — typecheck, 47 tests, boot smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      JWT_SECRET: ci-only-secret-not-used-in-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit + API tests
+        run: npm test
+      - name: Boot smoke — seed, start server, probe /api/health
+        run: |
+          npm run seed:demo
+          npm start > "$GITHUB_WORKSPACE/backend-boot.log" 2>&1 &
+          SERVER_PID=$!
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:8080/health; then echo; echo "backend healthy"; break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then echo "backend process died"; cat "$GITHUB_WORKSPACE/backend-boot.log"; exit 1; fi
+            if [ "$i" = 45 ]; then echo "backend did not become healthy in 45s"; cat "$GITHUB_WORKSPACE/backend-boot.log"; exit 1; fi
+            sleep 1
+          done
+          kill "$SERVER_PID" 2>/dev/null || true
+      - name: Upload boot log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-boot-log
+          path: backend-boot.log
+          if-no-files-found: ignore
+
+  web:
+    name: Web control plane — typecheck, 16 tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ogvpn-web-dist
+          path: web/dist/**
+          if-no-files-found: error
+
+  vpn-server-agent:
+    name: VPN server agent — 25 tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: vpn-server/agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vpn-server/agent/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  extension:
+    name: Chrome extension — syntax + pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check service worker and popup
+        run: |
+          node --check extension/background.js
+          node --check extension/popup.js
+      - name: Validate manifest JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json','utf8')); console.log('manifest OK')"
+      - name: Pack extension
+        run: |
+          cd extension
+          zip -qr ../ogvpn-extension-v${{ github.sha }}.zip .
+          cd ..
+          unzip -t ogvpn-extension-v${{ github.sha }}.zip > /dev/null
+          echo "zip integrity OK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ogvpn-extension-zip
+          path: ogvpn-extension-v${{ github.sha }}.zip
+          if-no-files-found: error
+
+  android:
+    name: Android — unit tests, debug/release APK, AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Gradle wrapper validity
+        run: |
+          test -f gradle/wrapper/gradle-wrapper.jar
+          test -f gradle/wrapper/gradle-wrapper.properties
+          chmod +x gradlew
+      - name: JVM unit tests
+        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest
+      - name: Assemble debug APK
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+      - name: Assemble release APK + AAB
+        run: ./gradlew --no-daemon --stacktrace :app:assembleRelease :app:bundleRelease
+      - name: Collect build outputs
+        run: |
+          set -eux
+          mkdir -p ../artifacts
+          find app/build/outputs -name "*.apk" -exec cp {} ../artifacts/ \;
+          find app/build/outputs -name "*.aab" -exec cp {} ../artifacts/ \;
+          ls -la ../artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ogvpn-android-builds
+          path: artifacts/**
+          if-no-files-found: error
+
+  desktop:
+    name: Desktop — ${{ matrix.os }} (tests + installer)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package installer (electron-builder)
+        run: npx electron-builder --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ogvpn-desktop-${{ matrix.os }}
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/*.AppImage
+            desktop/release/*.deb
+          if-no-files-found: error
+
+  platform:
+    name: Product platform — Prisma push + Next.js build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: platform
+    env:
+      DATABASE_URL: "file:../db/ci.db"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+      - run: npm ci
+      - name: Prisma generate + schema push (migration test)
+        run: |
+          npx prisma generate
+          npx prisma db push --accept-data-loss --skip-generate
+      - name: Next.js production build
+        run: npm run build
+
+  security:
+    name: Security — secret scan + dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scanning (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dependency vulnerability audit (critical)
+        run: |
+          set -e
+          for d in backend web desktop vpn-server/agent platform; do
+            echo "::group::npm audit — $d"
+            (cd "$d" && npm audit --omit=dev --audit-level=critical)
+            echo "::endgroup::"
+          done

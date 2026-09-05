@@ -1,0 +1,18 @@
+{
+  "name": "@aegisvpn/server-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AegisVPN VPN-server agent: heartbeats stats to the control plane and applies WireGuard peer ops via wg set.",
+  "type": "module",
+  "main": "agent.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node agent.js",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

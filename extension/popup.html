@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AegisVPN</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { width: 320px; margin: 0; padding: 14px; font: 14px/1.45 system-ui, sans-serif; background: #141615; color: #f4f4f5; }
+    header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .logo { width: 22px; height: 22px; border-radius: 6px; background: #10b981; display: grid; place-items: center; font-weight: 800; color: #0a0c0b; }
+    h1 { font-size: 15px; margin: 0; }
+    .pill { margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid #3f3f46; color: #a1a1aa; }
+    .pill.on { border-color: #10b981; color: #10b981; background: rgba(16,185,129,.1); }
+    button {
+      width: 100%; padding: 12px; border-radius: 10px; border: 0; cursor: pointer;
+      font-weight: 700; font-size: 14px; background: #27272a; color: #f4f4f5;
+    }
+    button.connect { background: #10b981; color: #0a0c0b; }
+    button.disconnect { background: #3f3f46; color: #fde68a; }
+    button:disabled { opacity: .6; cursor: wait; }
+    select { width: 100%; margin: 10px 0; padding: 9px; border-radius: 8px; background: #1c1c1f; color: #f4f4f5; border: 1px solid #3f3f46; }
+    .row { display: flex; justify-content: space-between; font-size: 12px; color: #a1a1aa; margin-top: 8px; }
+    .err { margin-top: 10px; font-size: 12px; color: #f87171; display: none; }
+    footer { margin-top: 12px; font-size: 11px; color: #71717a; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo" aria-hidden="true">A</span>
+    <h1>AegisVPN</h1>
+    <span class="pill" id="status">Browser proxy off</span>
+  </header>
+  <select id="server" aria-label="Proxy location">
+    <option value="auto">⚡ Fastest available</option>
+    <option value="us-east">🇺🇸 New York</option>
+    <option value="uk-lon">🇬🇧 London</option>
+    <option value="de-fra">🇩🇪 Frankfurt</option>
+    <option value="sg-sin">🇸🇬 Singapore</option>
+  </select>
+  <button id="toggle" class="connect">Protect browser</button>
+  <p class="err" id="err" role="alert"></p>
+  <div class="row"><span>Mode</span><span>Browser traffic only</span></div>
+  <div class="row"><span>Protocol</span><span>HTTPS CONNECT proxy</span></div>
+  <footer>System-wide coverage needs the desktop app. <a href="#" id="docs" style="color:#10b981">Learn why →</a></footer>
+  <script src="popup.js"></script>
+</body>
+</html>

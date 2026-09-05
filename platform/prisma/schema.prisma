@@ -1,0 +1,420 @@
+// AegisVPN — Data Architecture (Section AN: user/account/device/session/connection/server/
+// region/config/subscription/invoice/entitlement/notification/support/incident/audit/analytics models)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  passwordHash        String
+  name                String?
+  role                String    @default("user") // user | admin
+  status              String    @default("active") // active | suspended | deleted
+  statusReason        String?
+  emailVerified       Boolean   @default(false)
+  emailVerifyToken    String?
+  emailVerifyExpires  DateTime?
+  pendingEmail        String?
+  pendingEmailToken   String?
+  pendingEmailExpires DateTime?
+  passwordResetToken  String?
+  passwordResetExpires DateTime?
+  // MFA
+  mfaEnabled          Boolean   @default(false)
+  totpSecret          String?
+  totpEnrolledAt      DateTime?
+  backupCodes         String? // JSON array of hashed codes
+  // Preferences (privacy / VPN defaults)
+  killSwitch          Boolean   @default(true)
+  autoConnect         Boolean   @default(false)
+  protocolPreference  String    @default("wireguard") // wireguard | openvpn | ikev2
+  transportPreference String    @default("udp") // udp | tcp
+  dnsMode             String    @default("vpn") // vpn | custom
+  dnsServer           String?
+  ipv6Enabled         Boolean   @default(true)
+  lanBypass           Boolean   @default(true)
+  analyticsOptOut     Boolean   @default(false)
+  telemetryEnabled    Boolean   @default(true)
+  // Client integrity
+  clientVersion       String    @default("1.0.0")
+  failedLoginCount    Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  purgeAt             DateTime? // scheduled purge for deleted accounts (retention policy)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  sessions       Session[]
+  devices        Device[]
+  connections    Connection[]
+  subscription   Subscription?
+  invoices       Invoice[]
+  notifications  Notification[]
+  notificationPref NotificationPref?
+  tickets        SupportTicket[]
+  authAttempts   AuthAttempt[]
+  favorites      Favorite[]
+  recents        RecentServer[]
+  auditEvents    AuditEvent[]
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String    @unique
+  deviceLabel   String?
+  userAgent     String?
+  ip            String?
+  platform      String    @default("web")
+  trusted       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedReason String?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Device {
+  id              String    @id @default(cuid())
+  userId          String
+  name            String
+  platform        String // android | windows | macos | linux | ios | web | extension
+  osVersion       String?
+  appVersion      String?
+  publicKey       String    @unique
+  privateKey      String? // server-side escrow simulated for config download; device holds it in production
+  status          String    @default("active") // active | pending | revoked
+  configVersion   Int       @default(1)
+  splitTunnelMode String    @default("off") // off | include | exclude
+  splitRules      String? // JSON array of app paths / domains / cidrs
+  lastSeenAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  configs         VpnConfig[]
+  connections     Connection[]
+
+  @@index([userId])
+}
+
+model Region {
+  id            String  @id @default(cuid())
+  code          String  @unique
+  name          String
+  city          String
+  country       String
+  countryCode   String
+  continent     String
+  lat           Float
+  lng           Float
+  tier          String  @default("standard") // standard | plus | premium
+  baseLatencyMs Int     @default(20)
+  freeAllowed   Boolean @default(false)
+  servers       Server[]
+}
+
+model Server {
+  id                 String    @id @default(cuid())
+  hostname           String    @unique
+  code               String    @unique
+  regionId           String
+  status             String    @default("online") // online | maintenance | draining | offline | provisioning
+  loadPct            Int       @default(20)
+  capacity           Int       @default(500)
+  activeConnections  Int       @default(0)
+  latencyMs          Int       @default(20)
+  publicKey          String
+  privateKey         String?
+  wgPort             Int       @default(51820)
+  ipv4               String
+  ipv6               String
+  protocols          String    @default("[\"wireguard\"]")
+  version            String    @default("1.4.2")
+  health             String    @default("healthy") // healthy | degraded | critical
+  dedicated          Boolean   @default(false)
+  maintenanceUntil   DateTime?
+  lastHeartbeatAt    DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  region             Region    @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  configs            VpnConfig[]
+  connections        Connection[]
+  favorites          Favorite[]
+  recents            RecentServer[]
+
+  @@index([regionId])
+}
+
+model VpnConfig {
+  id        String    @id @default(cuid())
+  userId    String
+  deviceId  String
+  serverId  String
+  protocol  String
+  body      String
+  version   Int
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  server    Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+}
+
+model Connection {
+  id           String    @id @default(cuid())
+  userId       String
+  deviceId     String
+  serverId     String
+  regionId     String
+  protocol     String
+  transport    String    @default("udp")
+  status       String    @default("active") // active | ended | failed
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+  durationSec  Int       @default(0)
+  bytesIn      BigInt    @default(0)
+  bytesOut     BigInt    @default(0)
+  reconnects   Int       @default(0)
+  degraded     Boolean   @default(false)
+  endReason    String?
+  clientIp     String?
+  exitIp       String?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device       Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  server       Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([serverId])
+}
+
+model Subscription {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  plan              String    @default("free") // free | pro | business
+  status            String    @default("active") // active | trialing | past_due | grace | canceled | expired
+  deviceLimit       Int       @default(1)
+  bandwidthGb       Int? // null = unlimited
+  bytesUsed         BigInt    @default(0)
+  currentPeriodStart DateTime @default(now())
+  currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean   @default(false)
+  trialEndsAt       DateTime?
+  graceEndsAt       DateTime?
+  paymentMethod     String? // visa •••• 4242
+  canceledAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices          Invoice[]
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  number         String    @unique
+  amountCents    Int
+  currency       String    @default("USD")
+  status         String    @default("paid") // paid | open | void | refunded | failed
+  description    String
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  createdAt      DateTime  @default(now())
+  paidAt         DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+}
+
+model PaymentEvent {
+  id             String    @id @default(cuid())
+  provider       String    @default("stripe-sim")
+  eventId        String    @unique
+  type           String
+  payload        String
+  signatureValid Boolean   @default(false)
+  status         String    @default("received") // received | processed | duplicate | rejected
+  processedAt    DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model IdempotencyRecord {
+  key          String   @id
+  scope        String
+  responseHash String
+  responseJson String
+  createdAt    DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String // connection | security | account | billing | maintenance | incident | update | device | privacy
+  type      String
+  title     String
+  body      String
+  priority  String   @default("info") // info | important | critical
+  channels  String   @default("[\"in_product\"]")
+  read      Boolean  @default(false)
+  dedupeKey String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([userId, dedupeKey])
+}
+
+model NotificationPref {
+  id             String @id @default(cuid())
+  userId         String @unique
+  connection     Boolean @default(true)
+  security       Boolean @default(true)
+  account        Boolean @default(true)
+  billing        Boolean @default(true)
+  maintenance    Boolean @default(true)
+  incident       Boolean @default(true)
+  update         Boolean @default(false)
+  emailEnabled   Boolean @default(true)
+  pushEnabled    Boolean @default(false)
+  inProductEnabled Boolean @default(true)
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SupportTicket {
+  id        String   @id @default(cuid())
+  userId    String
+  subject   String
+  category  String   @default("technical") // technical | billing | account | abuse | other
+  priority  String   @default("normal") // low | normal | high | urgent
+  status    String   @default("open") // open | pending | solved | closed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  TicketMessage[]
+
+  @@index([userId])
+}
+
+model TicketMessage {
+  id          String   @id @default(cuid())
+  ticketId    String
+  authorRole  String // user | agent | system
+  authorName  String?
+  body        String
+  createdAt   DateTime @default(now())
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+model Incident {
+  id        String    @id @default(cuid())
+  title     String
+  severity  String    @default("minor") // minor | major | critical
+  status    String    @default("investigating") // investigating | identified | monitoring | resolved
+  components String   @default("[]") // JSON array e.g. ["api","gateway:eu-central"]
+  startedAt DateTime  @default(now())
+  resolvedAt DateTime?
+  updates   IncidentUpdate[]
+
+  @@index([status])
+}
+
+model IncidentUpdate {
+  id         String   @id @default(cuid())
+  incidentId String
+  status     String
+  message    String
+  createdAt  DateTime @default(now())
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   String?
+  ip         String?
+  severity   String   @default("info") // info | warning | critical
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String?
+  sessionId String?
+  props     String?
+  sampled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([name])
+}
+
+model AuthAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  userId    String?
+  success   Boolean
+  reason    String?
+  ip        String?
+  userAgent String?
+  suspicious Boolean @default(false)
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+model Favorite {
+  id       String   @id @default(cuid())
+  userId   String
+  serverId String
+  createdAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server   Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId])
+}
+
+model RecentServer {
+  id       String   @id @default(cuid())
+  userId   String
+  serverId String
+  usedAt   DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server   Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId])
+}
+
+model KbArticle {
+  id       String @id @default(cuid())
+  slug     String @unique
+  title    String
+  category String // getting-started | connection | billing | security | privacy | platform
+  body     String
+  order    Int    @default(0)
+}
