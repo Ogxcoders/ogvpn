@@ -34,16 +34,17 @@ Demo login (after seeding the backend, see root README):
 
 ## First-build checklist
 
-This codebase was **not compiled in CI** (no Android SDK in the build
-environment — documented honestly in `docs/TESTING.md`). Expected first build:
+This codebase **is compiled in CI**: GitHub Actions (`ci.yml`, job
+"Android — unit tests, debug/release APK, AAB") runs the JVM unit tests,
+assembles the debug APK, the minified release APK (R8) and the release AAB
+on every push, with AGP 8.7.3 / Kotlin 2.0.20 on JDK 17. Local build:
 
-1. Sync in Android Studio (it downloads AGP 8.5.2 / Kotlin 2.0.20 / deps).
+1. Sync in Android Studio (it downloads AGP 8.7.3 / Kotlin 2.0.20 / deps).
 2. If `com.wireguard.android:tunnel:1.0.20260102` fails to resolve, pick the
    newest `1.0.x` from Maven Central and update `app/build.gradle.kts`.
-3. If `GoBackend.setVpnServiceCreator` does not exist in your library
-   version, see `AegisApplication.kt` — that file is the single place where
-   the library glue lives (the `NoSuchMethodError` fallback already handles
-   it gracefully).
+3. The GoBackend glue lives in `AegisApplication.kt` (single integration
+   point: `setAlwaysOnCallback`); the system VPN service is the library's
+   `GoBackend$VpnService`, declared in `AndroidManifest.xml`.
 4. Install on device/emulator → log in → connect → grant VPN consent →
    verify your public IP changes (e.g. https://ifconfig.me) and DNS still
    resolves.
