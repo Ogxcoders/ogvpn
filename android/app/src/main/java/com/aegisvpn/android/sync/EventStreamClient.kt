@@ -2,6 +2,7 @@ package com.aegisvpn.android.sync
 
 import android.content.Context
 import android.util.Log
+import com.aegisvpn.android.data.demo.DemoMode
 import com.aegisvpn.android.data.repo.AuthRepository
 import com.aegisvpn.android.data.repo.VpnRepository
 import com.aegisvpn.android.vpn.TunnelManager
@@ -44,6 +45,12 @@ class EventStreamClient(
         try {
             var backoffMs = 1000L
             while (running.get()) {
+                // Demo mode has no control plane: park the stream (it resumes
+                // automatically if demo mode is switched off in Settings).
+                if (DemoMode.enabled) {
+                    delay(5_000)
+                    continue
+                }
                 val token = tokenStore.accessToken
                 if (token == null) {
                     delay(backoffMs)

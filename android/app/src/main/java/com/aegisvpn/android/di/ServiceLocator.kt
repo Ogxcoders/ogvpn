@@ -6,6 +6,8 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import com.aegisvpn.android.data.api.AegisApi
 import com.aegisvpn.android.data.api.AuthInterceptor
 import com.aegisvpn.android.data.api.TokenRefreshInterceptor
+import com.aegisvpn.android.data.demo.DemoInterceptor
+import com.aegisvpn.android.data.demo.DemoMode
 import com.aegisvpn.android.data.repo.AuthRepository
 import com.aegisvpn.android.data.repo.VpnRepository
 import com.aegisvpn.android.data.secure.TokenStore
@@ -65,6 +67,9 @@ object ServiceLocator {
             if (initialized) return
             val app = context.applicationContext
 
+            // Restore the demo-mode flag before anything can touch the network.
+            DemoMode.load(app)
+
             appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
             json = Json {
@@ -86,6 +91,8 @@ object ServiceLocator {
             // refresh interceptor that needs the api reference (cyclic by
             // nature; broken with a settable delegate).
             val earlyOkHttp = OkHttpClient.Builder()
+                // Demo mode answers locally; must run before auth/refresh logic.
+                .addInterceptor(DemoInterceptor())
                 .addInterceptor(authInterceptor)
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)

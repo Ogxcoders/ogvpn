@@ -32,6 +32,24 @@ Real devices on the same LAN: use your machine's LAN IP and add it to
 Demo login (after seeding the backend, see root README):
 `demo@aegisvpn.local` / `DemoPass123`.
 
+## Offline demo mode (no backend needed)
+
+The login screen has **“Explore demo mode (offline)”**. Tapping it signs you
+into a fully local simulation: every control-plane call is answered by
+`data/demo/DemoInterceptor` with real contract DTOs from
+`data/demo/DemoData` (mirrors `backend/seed/demo.ts` — same 7-server matrix,
+plans, sessions), and the connect sequence drives the real `VpnStateMachine`
+(Preparing → … → Connected) without starting `VpnService`.
+
+What works in demo mode: login/register, server list, connect/disconnect
+(including SERVER_UNAVAILABLE for maintenance/offline servers), device
+rename/revoke, sessions, subscription upgrade/cancel, kill-switch and
+split-tunnel settings UI.
+
+What is honestly NOT real in demo mode: no WireGuard tunnel, no traffic
+routing/protection. Settings shows a permanent “DEMO” badge, and
+“Exit demo mode” clears the flag and the fake session.
+
 ## First-build checklist
 
 This codebase **is compiled in CI**: GitHub Actions (`ci.yml`, job

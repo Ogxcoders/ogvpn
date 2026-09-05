@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.aegisvpn.android.BuildConfig
+import com.aegisvpn.android.data.demo.DemoMode
 import com.aegisvpn.android.data.repo.RepoError
 import com.aegisvpn.android.di.ServiceLocator
 import com.aegisvpn.android.vpn.TunnelManager
@@ -109,6 +110,16 @@ fun SettingsScreen(onLoggedOut: () -> Unit, onOpenDevices: () -> Unit) {
             Text("Protocol", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("WireGuard (wireguard-android GoBackend)", style = MaterialTheme.typography.bodyMedium)
         }
+        if (DemoMode.enabled) {
+            Column {
+                Text("Mode", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "DEMO — offline sample data. The VPN tunnel is simulated; no traffic is routed or protected.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+        }
         Column {
             Text("API", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(BuildConfig.API_BASE_URL, style = MaterialTheme.typography.bodySmall)
@@ -118,6 +129,18 @@ fun SettingsScreen(onLoggedOut: () -> Unit, onOpenDevices: () -> Unit) {
             Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.bodyMedium)
         }
 
+        if (DemoMode.enabled) {
+            TextButton(onClick = {
+                scope.launch {
+                    ServiceLocator.tunnelManager.disconnect()
+                    DemoMode.disable(context)
+                    ServiceLocator.authRepository.hardLogout()
+                    onLoggedOut()
+                }
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("Exit demo mode")
+            }
+        }
         Spacer(Modifier.height(6.dp))
         Button(onClick = {
             scope.launch {

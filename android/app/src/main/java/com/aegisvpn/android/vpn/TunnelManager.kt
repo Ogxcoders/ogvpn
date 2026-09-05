@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.aegisvpn.android.data.demo.DemoMode
 import com.aegisvpn.android.data.repo.AuthRepository
 import com.aegisvpn.android.data.repo.VpnRepository
 import com.aegisvpn.android.domain.VpnEvent
@@ -75,6 +76,7 @@ class TunnelManager(
     private var activeConfig: Config? = null
     private var statsJob: Job? = null
     private var reconnectJob: Job? = null
+    private var demoJob: Job? = null
     private var lastRx = 0L
     private var lastTx = 0L
     private var connectedServerId: String? = null
@@ -171,6 +173,12 @@ class TunnelManager(
      * connecting.
      */
     suspend fun connect(serverId: String): Intent? {
+        // Demo mode: never touch VpnService or the consent dialog — the
+        // connect sequence is simulated end to end (no real tunnel).
+        if (DemoMode.enabled) {
+            startDemoConnect(serverId)
+            return null
+        }
         val consent = VpnService.prepare(context)
         if (consent != null) {
             // Permission not yet granted: park in VpnPermissionRequired and
@@ -202,6 +210,12 @@ class TunnelManager(
     }
 
     private suspend fun doConnect(serverId: String) {
+        // Reconnect paths (kill-switch retry, split-tunnel apply) must stay in
+        // demo simulation too.
+        if (DemoMode.enabled) {
+            startDemoConnect(serverId)
+            return
+        }
         machine.transition(VpnEvent.ConnectRequested)
         publish()
         try {
@@ -344,6 +358,57 @@ class TunnelManager(
 
     private val lastActivityMs = ThreadLocal<Long>().apply { set(null) }
 
+    // ---- demo-mode simulated connect ----
+
+    /**
+     * Offline demo connect: drives the SAME [VpnStateMachine] through a legal
+     * event chain (Preparing → Authorizing → Configuring → Connecting →
+     * Handshaking → Connected) with realistic pacing, but never starts the
+     * system VpnService and never routes traffic. Server availability is
+     * enforced: maintenance/offline servers fail exactly like production.
+     */
+    private fun startDemoConnect(serverId: String) {
+        demoJob?.cancel()
+        demoJob = scope.launch {
+            machine.transition(VpnEvent.ConnectRequested)   // Idle/Disconnected -> Preparing
+            publish()
+            machine.transition(VpnEvent.PermissionGranted)  // Preparing -> Authorizing
+            publish()
+            val server = try {
+                vpnRepository.server(serverId)
+            } catch (e: Exception) {
+                machine.transition(VpnEvent.ApiFailed("CONNECT_FAILED", e.message))
+                publish()
+                return@launch
+            }
+            if (server.status != "active") {
+                machine.transition(VpnEvent.ServerUnavailable)
+                publish()
+                return@launch
+            }
+            delay(350)
+            machine.transition(VpnEvent.ConfigReady)        // Authorizing -> Configuring
+            publish()
+            delay(250)
+            machine.transition(VpnEvent.ConfigReady)        // Configuring -> Connecting
+            publish()
+            delay(400)
+            machine.transition(VpnEvent.TunnelUp)           // Connecting -> Handshaking
+            publish()
+            delay(650)
+            machine.transition(VpnEvent.HandshakeConfirmed) // Handshaking -> Connected
+            publish()
+            connectedServerId = server.id
+            _sessionInfo.value = SessionInfo(
+                serverId = server.id,
+                serverLabel = "${server.name} · ${server.city}, ${server.country}",
+                tunnelId = "tun-demo-${System.currentTimeMillis()}",
+                addressV4 = server.ipv4Prefix.removeSuffix(".0/24") + ".2",
+                connectedSinceMs = System.currentTimeMillis(),
+            )
+        }
+    }
+
     // ---- disconnect / kill switch ----
 
     fun disconnect() {
@@ -353,6 +418,7 @@ class TunnelManager(
     private suspend fun disconnectInternal(clearServer: Boolean) {
         reconnectJob?.cancel()
         statsJob?.cancel()
+        demoJob?.cancel()
         val wg = wgTunnel
         if (wg != null) {
             try {

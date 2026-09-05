@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.aegisvpn.android.data.demo.DemoMode
 import com.aegisvpn.android.data.repo.RepoError
 import com.aegisvpn.android.di.ServiceLocator
 import com.aegisvpn.android.domain.PasswordPolicy
@@ -36,6 +39,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(onAuthenticated: () -> Unit) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = LocalContext.current
     var mode by remember { mutableStateOf("login") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -64,6 +68,34 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                 } else {
                     ServiceLocator.authRepository.register(email, password, name)
                 }
+                onAuthenticated()
+            } catch (e: RepoError) {
+                error = if (e is RepoError.Network && !DemoMode.enabled) {
+                    "${e.message} — no backend reachable from this build? Tap \"Explore demo mode\" below."
+                } else {
+                    e.message
+                }
+            } catch (e: Exception) {
+                error = "Unexpected error: ${e.message}"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    /**
+     * Offline demo mode: flips [DemoMode] on (all API calls are answered
+     * locally by [com.aegisvpn.android.data.demo.DemoInterceptor]) and signs
+     * in with the documented demo fixture. No real server, no real tunnel.
+     */
+    fun enterDemo() {
+        busy = true
+        error = null
+        fieldErrors = emptyMap()
+        DemoMode.enable(context)
+        scope.launch {
+            try {
+                ServiceLocator.authRepository.login("demo@aegisvpn.local", "DemoPass123")
                 onAuthenticated()
             } catch (e: RepoError) {
                 error = e.message
@@ -151,5 +183,20 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                 else "Already registered? Sign in",
             )
         }
+
+        Spacer(Modifier.height(18.dp))
+        OutlinedButton(
+            onClick = { enterDemo() },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Explore demo mode (offline)")
+        }
+        Text(
+            "Sample servers, devices and VPN states — no account or backend needed. " +
+                "The tunnel is simulated; no traffic is routed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
