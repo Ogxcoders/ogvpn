@@ -38,7 +38,7 @@ This codebase was **not compiled in CI** (no Android SDK in the build
 environment — documented honestly in `docs/TESTING.md`). Expected first build:
 
 1. Sync in Android Studio (it downloads AGP 8.5.2 / Kotlin 2.0.20 / deps).
-2. If `com.wireguard.android:tunnel:1.0.20231018` fails to resolve, pick the
+2. If `com.wireguard.android:tunnel:1.0.20260102` fails to resolve, pick the
    newest `1.0.x` from Maven Central and update `app/build.gradle.kts`.
 3. If `GoBackend.setVpnServiceCreator` does not exist in your library
    version, see `AegisApplication.kt` — that file is the single place where

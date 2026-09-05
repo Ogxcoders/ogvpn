@@ -179,7 +179,7 @@ describe("auth", () => {
     const res = await request(t.app)
       .post("/api/v1/auth/password-change")
       .set(auth(u))
-      .send({ currentPassword: DEMO_PASSWORD, newPassword: "BrandNewPass456" });
+      .send({ currentPassword: DEMO_PASSWORD, newPassword: "BrandNewPass456" }); // gitleaks:allow — synthetic test password, never a real credential
     expect(res.status).toBe(204);
     const r = await request(t.app)
       .post("/api/v1/auth/refresh")
@@ -189,7 +189,7 @@ describe("auth", () => {
       .post("/api/v1/auth/login")
       .send({
         email: u.email,
-        password: "BrandNewPass456",
+        password: "BrandNewPass456", // gitleaks:allow — synthetic test password, never a real credential
         deviceName: "D",
         platform: "macos",
         deviceUid: deviceUid(),

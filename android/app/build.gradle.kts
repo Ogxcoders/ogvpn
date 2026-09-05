@@ -90,9 +90,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
 
     // WireGuard tunnel (GoBackend userspace implementation).
-    // The library's Maven Central versions are date-stamped; "1.1.1" does not
-    // exist, so the newest stable line available at the time of writing is used.
-    implementation("com.wireguard.android:tunnel:1.0.20231018")
+    // The library's Maven Central versions are date-stamped; verify against
+    // https://repo1.maven.org/maven2/com/wireguard/android/tunnel/ when bumping.
+    implementation("com.wireguard.android:tunnel:1.0.20260102")
 
     // Networking: Retrofit + OkHttp + kotlinx.serialization.
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

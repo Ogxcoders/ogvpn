@@ -117,7 +117,9 @@ function createWindow(): void {
   if (devUrl) {
     void mainWindow.loadURL(devUrl);
   } else {
-    void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    // __dirname = <app>/dist/electron/src/main at runtime; the vite renderer
+    // bundle lives at <app>/dist/renderer, so climb three levels.
+    void mainWindow.loadFile(path.join(__dirname, '../../../renderer/index.html'));
   }
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
