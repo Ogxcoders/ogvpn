@@ -75,7 +75,7 @@ class VpnRepository(
     }
 
     suspend fun revokeDevice(id: String) {
-        apiCall { api.revokeDevice(id) }
+        apiCallResponse { api.revokeDevice(id) }
     }
 
     // ---- sessions ----
@@ -84,7 +84,7 @@ class VpnRepository(
         apiCall { api.sessions() }.sessions.map { it.toDomain() }
 
     suspend fun forceDisconnect(sessionId: String) {
-        apiCall { api.forceDisconnect(sessionId) }
+        apiCallResponse { api.forceDisconnect(sessionId) }
     }
 
     // ---- subscription ----
@@ -122,7 +122,7 @@ class VpnRepository(
     suspend fun tunnelPrivateKey(tunnelId: String): String? = tokens.tunnelPrivateKey(tunnelId)
 
     suspend fun deleteTunnel(tunnelId: String) {
-        apiCall { api.deletePeer(tunnelId) }
+        apiCallResponse { api.deletePeer(tunnelId) }
         tokens.removeTunnelPrivateKey(tunnelId)
     }
 

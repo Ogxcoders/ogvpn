@@ -53,7 +53,7 @@ sealed interface VpnEvent {
 /** Result of a single transition attempt. */
 sealed interface TransitionResult {
     /** The event was legal; [state] is the (possibly unchanged) new state. */
-    data class Accepted(val state: VpnState) : TransitionResult
+    data class Accepted(override val state: VpnState) : TransitionResult
 
     /** The event was illegal for [from]; the state machine did not change. */
     data class Rejected(val from: VpnState, val event: VpnEvent) : TransitionResult
@@ -306,7 +306,7 @@ class VpnStateMachine(initial: VpnState = VpnState.Idle) {
 
         /** True for resting failure states that require user action to leave. */
         fun isRestingFailure(state: VpnState): Boolean = when (state) {
-            VpnState.Error,
+            is VpnState.Error,
             VpnState.AuthRequired,
             VpnState.VpnPermissionRequired,
             VpnState.ServerUnavailable,

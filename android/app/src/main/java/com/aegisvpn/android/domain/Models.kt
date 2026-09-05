@@ -44,7 +44,11 @@ data class DeviceSessionRef(
 
 /** Device row with its optional active session, exactly as `GET /devices` returns it. */
 data class DeviceSummary(
-    val device: Device,
+    val id: String,
+    val name: String,
+    val platform: String,
+    val status: String,
+    val lastActiveAt: String?,
     val createdAt: String?,
     val session: DeviceSessionRef?,
 )
@@ -202,7 +206,11 @@ fun DeviceSessionRefDto.toDomain(): DeviceSessionRef = DeviceSessionRef(
 )
 
 fun DeviceSummaryDto.toDomain(): DeviceSummary = DeviceSummary(
-    device = Device(id, name, platform, status, lastActiveAt),
+    id = id,
+    name = name,
+    platform = platform,
+    status = status,
+    lastActiveAt = lastActiveAt,
     createdAt = createdAt,
     session = session?.toDomain(),
 )

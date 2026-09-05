@@ -136,8 +136,8 @@ fun HomeScreen(onOpenServers: () -> Unit, onOpenSettings: () -> Unit) {
                                     ?: throw RepoError.Network(java.io.IOException("no servers"))
                                 ServiceLocator.vpnRepository.selectServer(serverId)
                                 ServiceLocator.tunnelManager.connect(serverId)?.let { consent ->
-                                    // MainActivity receives this via the callback below.
-                                    vpnConsentEmitter.emit(consent to serverId)
+                                    // MainActivity observes this via snapshotFlow.
+                                    vpnConsentEmitter.value = consent to serverId
                                 }
                             }
                         } catch (e: RepoError) {

@@ -20,6 +20,7 @@ import com.aegisvpn.android.domain.toDomain
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.first
+import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
 import java.util.UUID
@@ -41,29 +42,57 @@ sealed class RepoError : Exception() {
 /**
  * Maps retrofit failures to [VpnApiError] using the contract error envelope:
  * {"error": {"code": "...", "message": "..."}}.
+ *
+ * Two helpers because the API interface mixes both result shapes:
+ *  - [apiCall] for endpoints that return the parsed DTO directly (non-2xx
+ *    raises [HttpException] inside the call);
+ *  - [apiCallResponse] for 204-style endpoints (logout, revoke, delete…)
+ *    declared as [Response] — Retrofit returns the error response instead of
+ *    throwing there, and the success body is legitimately null.
  */
-suspend fun <T> apiCall(block: suspend () -> Response<T>): T {
+suspend fun <T> apiCall(block: suspend () -> T): T {
+    return try {
+        block()
+    } catch (e: IOException) {
+        throw RepoError.Network(e)
+    } catch (e: HttpException) {
+        throw RepoError.Api(parseHttpError(e.code(), e.response()?.errorBody()?.string()))
+    } catch (e: kotlinx.serialization.SerializationException) {
+        throw RepoError.Api(VpnApiError("BAD_RESPONSE", "Malformed response body", 0))
+    } catch (e: Exception) {
+        throw RepoError.Api(VpnApiError("CLIENT_ERROR", e.message ?: "Request failed", 0))
+    }
+}
+
+/** [Response]-returning endpoints (204/Unit) — never fail on a null body. */
+suspend fun <T> apiCallResponse(block: suspend () -> Response<T>): T {
     val response = try {
         block()
     } catch (e: IOException) {
         throw RepoError.Network(e)
-    } catch (e: Exception) {
-        // Retrofit throws HttpException only for non-2xx without suspend Response;
-        // all our endpoints declare Response<T> or DTO so this path is rare.
-        throw RepoError.Api(VpnApiError("CLIENT_ERROR", e.message ?: "Request failed", 0))
     }
     if (response.isSuccessful) {
-        return response.body() ?: throw RepoError.Api(VpnApiError("EMPTY_BODY", "Empty response body", response.code()))
+        val body = response.body()
+        @Suppress("UNCHECKED_CAST")
+        return body ?: Unit as T
     }
-    val envelope = try {
-        val raw = response.errorBody()?.string()
-        if (raw != null) json().decodeFromString(ErrorEnvelope.serializer(), raw) else null
-    } catch (e: Exception) {
+    val raw = try {
+        response.errorBody()?.string()
+    } catch (_: Exception) {
         null
     }
-    val code = envelope?.error?.code ?: "HTTP_${response.code()}"
-    val message = envelope?.error?.message ?: "Request failed with status ${response.code()}"
-    throw RepoError.Api(VpnApiError(code, message, response.code()))
+    throw RepoError.Api(parseHttpError(response.code(), raw))
+}
+
+private fun parseHttpError(httpStatus: Int, raw: String?): VpnApiError {
+    val envelope = try {
+        raw?.let { json().decodeFromString(ErrorEnvelope.serializer(), it) }
+    } catch (_: Exception) {
+        null
+    }
+    val code = envelope?.error?.code ?: "HTTP_$httpStatus"
+    val message = envelope?.error?.message ?: "Request failed with status $httpStatus"
+    return VpnApiError(code, message, httpStatus)
 }
 
 /** Lazily shared Json for error-envelope parsing (kept out of DI on purpose). */
@@ -148,7 +177,7 @@ class AuthRepository(
         val refresh = tokens.refreshToken
         if (refresh != null) {
             try {
-                apiCall { api.logout(LogoutRequest(refresh)) }
+                apiCallResponse { api.logout(LogoutRequest(refresh)) }
             } catch (e: Exception) {
                 // Logout is best-effort: clear local state regardless.
                 Log.w(TAG, "logout call failed; clearing local session anyway")
@@ -167,14 +196,14 @@ class AuthRepository(
     suspend fun changePassword(current: String, new: String) {
         val problems = PasswordPolicy.errors(new)
         if (problems.isNotEmpty()) throw RepoError.Validation(problems)
-        apiCall { api.passwordChange(PasswordChangeRequest(current, new)) }
+        apiCallResponse { api.passwordChange(PasswordChangeRequest(current, new)) }
         // Backend invalidates every refresh token on password change.
         tokens.clear()
         authEvents.tryEmit(AuthEvent.SessionExpired)
     }
 
     suspend fun deleteAccount(password: String) {
-        apiCall { api.deleteAccount(DeleteAccountRequest(password)) }
+        apiCallResponse { api.deleteAccount(DeleteAccountRequest(password)) }
         tokens.clear()
         authEvents.tryEmit(AuthEvent.LoggedOut)
     }

@@ -27,27 +27,26 @@
         </activity>
 
         <!-- Foreground control-plane service: persistent status notification,
-             user disconnect handling and VPN revocation callbacks. -->
+             user disconnect handling and app-level lifecycle bridging. It is a
+             plain foreground service — the system-facing VPN service is the
+             library's GoBackend$VpnService declared below. -->
         <service
             android:name=".vpn.AegisVpnService"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:permission="android.permission.BIND_VPN_SERVICE">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
+            android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="vpn-tunnel" />
+                android:value="vpn-status" />
         </service>
 
         <!-- wireguard-android GoBackend integration (library README, section
-             "GoBackend integration"): the library starts this exact component by
-             class name, establishes the TUN interface through it and hands the
-             file descriptor to the Go userspace implementation. -->
+             "GoBackend integration"): the library starts this exact component
+             by class name, establishes the TUN interface through it and hands
+             the file descriptor to the Go userspace implementation. -->
         <service
             android:name="com.wireguard.android.backend.GoBackend$VpnService"
-            android:exported="false">
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>

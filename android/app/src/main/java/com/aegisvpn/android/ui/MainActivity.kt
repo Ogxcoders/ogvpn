@@ -21,13 +21,16 @@ import com.aegisvpn.android.ui.screens.HomeScreen
 import com.aegisvpn.android.ui.screens.LoginScreen
 import com.aegisvpn.android.ui.screens.ServersScreen
 import com.aegisvpn.android.ui.screens.SettingsScreen
+import com.aegisvpn.android.ui.screens.VpnConsentBridge
 import com.aegisvpn.android.ui.theme.AegisTheme
 import com.aegisvpn.android.vpn.TunnelManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.compose.runtime.snapshotFlow
 import androidx.core.content.ContextCompat
 
 /**
@@ -90,9 +93,9 @@ class MainActivity : ComponentActivity() {
 
         // VPN consent bridge: HomeScreen surfaces the system consent Intent.
         lifecycleScope.launch {
-            com.aegisvpn.android.ui.screens.VpnConsentBridge.pending.collect { pending ->
+            snapshotFlow { VpnConsentBridge.pending.value }.collect { pending ->
                 if (pending != null) {
-                    com.aegisvpn.android.ui.screens.VpnConsentBridge.pending.value = null
+                    VpnConsentBridge.pending.value = null
                     startVpnPermissionFlow(pending.second, pending.first)
                 }
             }
@@ -105,7 +108,7 @@ class MainActivity : ComponentActivity() {
                     null -> Unit // splash: resolving session
                     else -> {
                         val nav = rememberNavController()
-                        NavHost(nav, startRoute = if (loggedInState == true) "home" else "login") {
+                        NavHost(nav, startDestination = if (loggedInState == true) "home" else "login") {
                             composable("login") {
                                 LoginScreen(onAuthenticated = { loggedIn.value = true })
                             }
@@ -146,7 +149,7 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
             if (!granted) {
-                ActivityCompat.requestPermission(
+                ActivityCompat.requestPermissions(
                     this,
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                     1001,

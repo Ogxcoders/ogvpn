@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.VpnService
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -22,6 +23,7 @@ import com.wireguard.android.backend.Backend
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
+import com.wireguard.config.InetAddresses
 import com.wireguard.config.InetNetwork
 import com.wireguard.config.Interface
 import com.wireguard.config.Peer
@@ -37,7 +39,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.InetSocketAddress
 
 /**
  * The VPN engine.
@@ -170,7 +171,7 @@ class TunnelManager(
      * connecting.
      */
     suspend fun connect(serverId: String): Intent? {
-        val consent = VpnService.prepareCompat(context)
+        val consent = VpnService.prepare(context)
         if (consent != null) {
             // Permission not yet granted: park in VpnPermissionRequired and
             // wait for MainActivity to deliver the consent result.
@@ -186,7 +187,7 @@ class TunnelManager(
 
     private var pendingServerId: String? = null
 
-    fun onPermissionDenied(serverId: String) {
+    fun onPermissionDenied(serverId: String?) {
         pendingServerId = null
         machine.transition(VpnEvent.PermissionDenied)
         publish()
@@ -277,14 +278,22 @@ class TunnelManager(
             interfaceBuilder.addAddress(InetNetwork.parse("${tunnel.addressV6}/128"))
         }
         if (tunnel.dns.isNotBlank()) {
-            interfaceBuilder.addDnsServer(tunnel.dns)
+            try {
+                interfaceBuilder.addDnsServer(InetAddresses.parse(tunnel.dns))
+            } catch (e: Exception) {
+                Log.w(TAG, "unparseable DNS server from contract: ${tunnel.dns}", e)
+            }
+        }
+        if (excluded.isNotEmpty()) {
+            // Split tunneling (exclude mode) is an Interface-level property in
+            // this wireguard-android line: excludeApplications(String...).
+            interfaceBuilder.excludeApplications(*excluded.toTypedArray())
         }
         val peerBuilder = Peer.Builder()
             .parsePublicKey(tunnel.serverPublicKey)
-            .endpoint(InetSocketAddress(tunnel.endpointHost, tunnel.endpointPort))
-            .persistentKeepalive(tunnel.keepalive)
-        for (ip in tunnel.allowedIps) peerBuilder.addAllowedIp(ip)
-        for (pkg in excluded) peerBuilder.addExcludedApplication(pkg)
+            .parseEndpoint("${tunnel.endpointHost}:${tunnel.endpointPort}")
+            .setPersistentKeepalive(tunnel.keepalive)
+        for (ip in tunnel.allowedIps) peerBuilder.addAllowedIp(InetNetwork.parse(ip))
         return Config.Builder()
             .setInterface(interfaceBuilder.build())
             .addPeer(peerBuilder.build())
@@ -402,6 +411,18 @@ class TunnelManager(
     }
 
     fun currentState(): VpnState = machine.current
+
+    /** Called when the system Always-on VPN feature started the tunnel itself. */
+    fun onAlwaysOnStarted() {
+        machine.transition(VpnEvent.TunnelUp)
+        publish()
+    }
+
+    /** Minimal [Tunnel] adapter: stable identity + no-op state callbacks. */
+    private class WgTunnel(private val name: String = "aegisvpn0") : Tunnel {
+        override fun getName(): String = name
+        override fun onStateChange(newState: Tunnel.State) {}
+    }
 
     companion object {
         private const val TAG = "TunnelManager"
