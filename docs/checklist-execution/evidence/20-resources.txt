@@ -1,0 +1,44 @@
+
+### GET /servers — real 7-server matrix
+HTTP 200
+{"servers":[{"id":"bf1ed344-5919-4f21-88a5-a49fe77df6d7","code":"fi-hel-01","name":"Helsinki-1","country":"Finland","city":"Helsinki","host":"hel01.demo.aegisvpn.local","port":51820,"publicKey":"f6tKdKK8ibqMjo9CXvy2BzwU4R6MMONBQOWGnWXC4tM=","dns":"10.13.0.1","status":"active","capacity":60,"tunnelCount":0,"loadPct":0,"ipv4Prefix":"10.13.6.0/24","ipv6Prefix":"::/0","supportsDualStack":false,"lastHeartbeatAt":null},{"id":"d4b0f49b-79b8-4c85-8b22-e4d13777b762","code":"de-fra-01","name":"Frankfurt-1","country":"Germany","city":"Frankfurt","host":"fra01.demo.aegisvpn.local","port":51820,"publicKey":"q6vUDEDIaerfdecLFjH5EWy6gneni9B5+daQomGVhuA=","dns":"10.13.0.1","status":"active","capacity":250,"tunnelCount":1,"loadPct":0,"ipv4Prefix":"10.13.1.0/24","ipv6Prefix":"fd00:0a12::/64","supportsDualStack":true,"lastHeartbeatAt":null},{"id":"1c5fcf44-917e-491a-ac6e-20ccfe2abc52","code":"jp-tyo-01","name":"Tokyo-1","country":"Japan","city":"Tokyo","host":"tyo01.demo.aegisvpn.local","port":51820,"publicKey":"cLBoKG+bS7T/8pd57Kae6kaCmmQbbg2nm8ogb4azGws=","dns":"10.13.0.1","status":"offline","capacity":250,"tunnelCount":0,"loadPct":0,"ipv4Prefix":"10.13.4.0/24","ipv6Prefix":"fd00:0a15::/64","supportsDualStack":true,"lastHeartbeatAt":null},{"id":"a68455d7-25d3-4dfd-90bd-fd636dc8b728","code":"nl-ams-01","name":"Amsterdam-1","country":"Netherlands","city":"Amsterdam","host":"ams01.demo.aegisvpn.local","port":51820,"publicKey":"PbH1G9R5oU9aZWTA2FwdDHw2Kg+dcwn5w6yRAjxs4HA=","dns":"10.13.0.1","status":"active","capacity":250,"tunnelCount":2,"loadPct":1,"ipv4Prefix":"10.13.0.0/24","ipv6Prefix":"fd00:0a11::/64","supportsDualStack":true,"lastHeartbeatAt":null},{"id":"e0b8a556-249b-495d-894c-df68ab24ebd5","code":"sg-sin-01","name":"Singapore-1","country":"Singapore","city":"Singapore","host":"sin01.demo.aegisvpn.local","port":51820,"publicKey":"kdTCEpTsNteNr/WZfzAtKEDnOyO5DiPV4IsRbnj6+SA=","dns":"10.13.0.1","status":"maintenance","capacity":250,"tunnelCount":0,"loadPct":0,"ipv4Prefix":"10.13.3.0/24","ipv6Prefix":"fd00:0a14::/64","supportsDualStack":true,"lastHeartbeatAt":null},{"id":"c99a5a05-4c39-449b-9f15-39219f7ec0f3","code":"uk-lon-01","name":"London-1","country":"United Kingdom","city":"London","host":"lon01.demo.aegisvpn.local","port":51820,"publicKey":"9YH9C8ibd1vZvcxg5/zev1bQmXS2QX3jip2MiZ194ME=","dns":"10.13.0.1","status":"drain","capacity":250,"tunnelCount":0,"loadPct":0,"ipv4Prefix":"10.13.5.0/24","ipv6Prefix":"fd00:0a16::/64","supportsDualStack":true,"lastHeartbeatAt":null},{"id":"78284ccb-1cee-4777-a47a-ac3a6e0c0e2b","code":"us-nyc-01","name":"NewYork-1","country":"United States","city":"New York","host":"nyc01.demo.aegisvpn.local","port":51820,"publicKey":"QAFtGFpejV4F9pKH3uNnKuiTnhRJHKNKQjwJ/JFQhy8=","dns":"10.13.0.1","status":"active","capacity":250,"tunnelCount":1,"loadPct":0,"ipv4Prefix":"10.13.2.0/24","ipv6Prefix":"fd00:0a13::/64","supportsDualStack":true,"lastHeartbeatAt":null}]}
+
+### GET /devices
+HTTP 200
+{"devices":[{"id":"98afc04c-0f8e-43ff-9646-ba3ed45959a5","name":"Pixel 8","platform":"android","status":"active","lastActiveAt":"2026-09-05T23:13:03.490Z","createdAt":"2026-09-05T23:13:03.490Z","session":{"id":"25e2e5df-d4d2-4752-b625-2bfff9bed7ed","state":"connected","tunnelId":"ffb5228c-7daf-492a-9b2f-f87ac6edfa9c","serverId":"a68455d7-25d3-4dfd-90bd-fd636dc8b728"}},{"id":"0826a520-c8d8-47d2-9976-a908a5f6b113","name":"Demo Laptop","platform":"linux","status":"active","lastActiveAt":"2026-09-05T23:13:03.490Z","createdAt":"2026-09-05T23:13:03.490Z","session":null},{"id":"a2ac876c-00d9-4778-9942-d4317741b21a","name":"matrix-runner","platform":"linux","status":"active","lastActiveAt":"2026-09-05T23:13:05.165Z","createdAt":"2026-09-05T23:13:05.165Z","session":null}]}
+
+### POST /vpn/peers on MAINTENANCE server sg-sin-01 (failure path)
+HTTP 400
+{"error":{"code":"VALIDATION_ERROR","message":"Request validation failed","details":[{"path":"deviceId","message":"Invalid uuid"},{"path":"serverId","message":"Invalid uuid"},{"path":"publicKey","message":"String must contain at least 44 character(s)"}]}}
+
+### POST /vpn/peers over plan device limit (entitlement failure path)
+HTTP 403
+{"error":{"code":"DEVICE_LIMIT_REACHED","message":"Plan free allows 2 devices. Upgrade or revoke a device."}}
+
+### DELETE seed 'Demo Laptop' (real slot-freeing mutation)
+HTTP 204
+
+
+### POST /vpn/peers on MAINTENANCE server (real failure path)
+HTTP 503
+{"error":{"code":"SERVER_UNAVAILABLE","message":"Server is maintenance"}}
+
+### POST /vpn/peers on OFFLINE server (real failure path)
+HTTP 503
+{"error":{"code":"SERVER_UNAVAILABLE","message":"Server is offline"}}
+
+### POST /vpn/peers on ACTIVE server (real success path)
+HTTP 201
+{"tunnel":{"id":"36352ebb-1c73-4335-a20d-4fefe4608a9d","serverId":"bf1ed344-5919-4f21-88a5-a49fe77df6d7","addressV4":"10.13.6.2","addressV6":"::","serverPublicKey":"f6tKdKK8ibqMjo9CXvy2BzwU4R6MMONBQOWGnWXC4tM=","endpointHost":"hel01.demo.aegisvpn.local","endpointPort":51820,"allowedIps":["0.0.0.0/0","::/0"],"dns":"10.13.0.1","mtu":1420,"keepalive":25,"status":"active"},"session":{"id":"f09d92db-c473-4886-9abd-61d6a0f079c7","state":"connected"}}
+
+### GET /vpn/peers (tunnel list)
+HTTP 200
+{"tunnels":[{"id":"36352ebb-1c73-4335-a20d-4fefe4608a9d","serverId":"bf1ed344-5919-4f21-88a5-a49fe77df6d7","addressV4":"10.13.6.2","addressV6":"::","serverPublicKey":"f6tKdKK8ibqMjo9CXvy2BzwU4R6MMONBQOWGnWXC4tM=","endpointHost":"hel01.demo.aegisvpn.local","endpointPort":51820,"allowedIps":["0.0.0.0/0","::/0"],"dns":"10.13.0.1","mtu":1420,"keepalive":25,"status":"active"},{"id":"ffb5228c-7daf-492a-9b2f-f87ac6edfa9c","serverId":"a68455d7-25d3-4dfd-90bd-fd636dc8b728","addressV4":"10.13.0.2","addressV6":"fd00:0a11::2","serverPublicKey":"PbH1G9R5oU9aZWTA2FwdDHw2Kg+dcwn5w6yRAjxs4HA=","endpointHost":"ams01.demo.aegisvpn.local","endpointPort":51820,"allowedIps":["0.0.0.0/0","::/0"],"dns":"10.13.0.1","mtu":1420,"keepalive":25,"status":"active"}]}
+
+### GET /sessions (real session rows)
+HTTP 200
+{"sessions":[{"id":"f09d92db-c473-4886-9abd-61d6a0f079c7","state":"connected","deviceId":"a2ac876c-00d9-4778-9942-d4317741b21a","deviceName":"matrix-runner","serverId":"bf1ed344-5919-4f21-88a5-a49fe77df6d7","serverName":"Helsinki-1","connectedAt":"2026-09-05T23:13:05.784Z","closedAt":null,"bytesIn":0,"bytesOut":0},{"id":"25e2e5df-d4d2-4752-b625-2bfff9bed7ed","state":"connected","deviceId":"98afc04c-0f8e-43ff-9646-ba3ed45959a5","deviceName":"Pixel 8","serverId":"a68455d7-25d3-4dfd-90bd-fd636dc8b728","serverName":"Amsterdam-1","connectedAt":"2026-09-05T23:12:03.490Z","closedAt":null,"bytesIn":1678071328,"bytesOut":1852649724}]}
+
+### PATCH device rename (real mutation)
+HTTP 200
+{"device":{"id":"a2ac876c-00d9-4778-9942-d4317741b21a","user_id":"3c2d08d9-7949-4813-ab26-d23231209450","name":"matrix-runner-renamed","platform":"linux","device_uid":"11111111-1111-4111-8111-0000000000aa","status":"active","last_active_at":"2026-09-05T23:13:05.165Z","created_at":"2026-09-05T23:13:05.165Z"}}

@@ -1,0 +1,4 @@
+
+### GET /health — real server up
+HTTP 200
+{"status":"ok","uptimeSec":0,"version":"1.0.0"}

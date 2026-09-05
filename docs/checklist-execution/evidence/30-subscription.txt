@@ -1,0 +1,20 @@
+
+### GET /subscription (free plan)
+HTTP 200
+{"subscription":{"plan":"free","status":"active","currentPeriodEnd":null,"maxDevices":2}}
+
+### GET /subscription/plans (catalog)
+HTTP 200
+{"plans":[{"code":"free","name":"Free","priceCents":0,"interval":"month","maxDevices":2,"features":["2 devices","All server regions","Kill switch","Unlimited data"]},{"code":"premium","name":"Premium","priceCents":700,"interval":"month","maxDevices":10,"features":["10 devices","Priority routing","Multi-hop (roadmap)","Dedicated IPv6","Kill switch"]}]}
+
+### POST /subscription/checkout premium (real mutation)
+HTTP 200
+{"subscription":{"plan":"premium","status":"active","currentPeriodEnd":"2026-10-05T23:13:05.844Z","simulatedPayment":true}}
+
+### POST /subscription/cancel
+HTTP 200
+{"subscription":{"plan":"premium","status":"canceled","currentPeriodEnd":"2026-10-05T23:13:05.844Z","maxDevices":10}}
+
+### POST /subscription/checkout with UNKNOWN plan (failure path)
+HTTP 400
+{"error":{"code":"VALIDATION_ERROR","message":"Request validation failed","details":[{"path":"planCode","message":"Invalid enum value. Expected 'free' | 'premium', received 'ultra'"}]}}

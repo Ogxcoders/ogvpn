@@ -1,0 +1,34 @@
+
+### login with WRONG password (failure path)
+HTTP 401
+{"error":{"code":"UNAUTHORIZED","message":"Invalid email or password"}}
+
+### login with malformed email (validation path)
+HTTP 400
+{"error":{"code":"VALIDATION_ERROR","message":"Request validation failed","details":[{"path":"email","message":"Invalid email"}]}}
+### login demo@aegisvpn.local with CORRECT password (success path)
+HTTP 200
+{"user":{"id":"3c2d08d9-7949-4813-ab26-d23231209450","email":"demo@aegisvpn.local","name":"Demo User","role":"user","status":"active"},"device":{"id":"a2ac876c-00d9-4778-9942-d4317741b21a","name":"matrix-runner","platform":"linux","status":"active","lastActiveAt":"2026-09-05T23:13:05.165Z"},"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzYzJkMDhkOS03OTQ5LTQ4MTMtYWIyNi1kMjMyMzEyMDk0NTAiLCJkaWQiOiJhMmFjODc2Yy0wMGQ5LTQ3NzgtOTk0Mi1kNDMxNzc0MWIyMWEiLCJyb2xlIjoidXNlciIsInR5cCI6ImFjY2VzcyIsImlzcyI6ImFlZ2lzdnBuIiwiaWF0IjoxNzg4NjQ5OTg1LCJleHAiOjE3ODg2NTA4ODUsImp0aSI6ImM3MDIwMDRjLTkyMjktNDdlMy1hM2U0LTdmNTE0NmJmMDUwYyJ9.9n51IubHBvAYlQJqaJxlqmx5tzVGGsZWgbItzX2_mw4","refreshToken":"<REDACTED>"}
+### GET /auth/me with real access token
+HTTP 200
+{"user":{"id":"3c2d08d9-7949-4813-ab26-d23231209450","email":"demo@aegisvpn.local","name":"Demo User","role":"user","status":"active"},"subscription":{"plan":"free","status":"active","currentPeriodEnd":null,"maxDevices":2},"device":{"id":"a2ac876c-00d9-4778-9942-d4317741b21a","name":"matrix-runner","platform":"linux","status":"active","last_active_at":"2026-09-05T23:13:05.165Z"}}
+
+### GET /auth/me with FORGED token (authz failure path)
+HTTP 401
+{"error":{"code":"UNAUTHORIZED","message":"Invalid token signature"}}
+
+### login premium@aegisvpn.local (second seeded identity)
+HTTP 200
+{"user":{"id":"e26fc59a-23db-4ef4-9547-2bf1c1e1e563","email":"premium@aegisvpn.local","name":"Premium User","role":"user","status":"active"},"device":{"id":"7745de1a-17bb-430b-906f-8a7a83afe8b0","name":"matrix","platform":"linux","status":"active","lastActiveAt":"2026-09-05T23:13:05.318Z"},"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlMjZmYzU5YS0yM2RiLTRlZjQtOTU0Ny0yYmYxYzFlMWU1NjMiLCJkaWQiOiI3NzQ1ZGUxYS0xN2JiLTQzMGItOTA2Zi04YTdhODNhZmU4YjAiLCJyb2xlIjoidXNlciIsInR5cCI6ImFjY2VzcyIsImlzcyI6ImFlZ2lzdnBuIiwiaWF0IjoxNzg4NjQ5OTg1LCJleHAiOjE3ODg2NTA4ODUsImp0aSI6IjgzNWQ3YjE5LWFmY2YtNDAwZi04MGQ5LTY5OWIxNDA1NjI4YSJ9.nk06e1xP2nLGjrsFwtTINHSzkDAU0EXGnHkNs7AVwfk","refreshToken":"<REDACTED>"}
+
+### login disabled@aegisvpn.local (disabled-account path)
+HTTP 403
+{"error":{"code":"ACCOUNT_DISABLED","message":"Account is disabled"}}
+
+### POST /auth/refresh with real refresh token (rotation)
+HTTP 200
+{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzYzJkMDhkOS03OTQ5LTQ4MTMtYWIyNi1kMjMyMzEyMDk0NTAiLCJkaWQiOiJhMmFjODc2Yy0wMGQ5LTQ3NzgtOTk0Mi1kNDMxNzc0MWIyMWEiLCJyb2xlIjoidXNlciIsInR5cCI6ImFjY2VzcyIsImlzcyI6ImFlZ2lzdnBuIiwiaWF0IjoxNzg4NjQ5OTg1LCJleHAiOjE3ODg2NTA4ODUsImp0aSI6IjAwNzEyY2FhLTBhMTQtNGNjZi1hODRhLTk3ZTFmY2NlMzAzZCJ9.0IfaXuV8IeCVJ4pMj4yz6jjbJk_5_BL6q_2rtgChGJk","refreshToken":"<REDACTED>"}
+
+### POST /auth/refresh REUSING rotated token (reuse-detection path)
+HTTP 401
+{"error":{"code":"UNAUTHORIZED","message":"Refresh token reuse detected; all sessions revoked"}}

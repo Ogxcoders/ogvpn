@@ -1,0 +1,12 @@
+
+### DELETE current device (real revocation — backend allows it)
+HTTP 204
+
+
+### GET /auth/me AFTER self-revocation (revocation enforcement proof)
+HTTP 401
+{"error":{"code":"DEVICE_REVOKED","message":"Device has been revoked"}}
+
+### POST /auth/logout (real token revocation)
+HTTP 400
+{"error":{"code":"VALIDATION_ERROR","message":"Request validation failed","details":[{"path":"refreshToken","message":"String must contain at least 20 character(s)"}]}}
