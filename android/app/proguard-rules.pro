@@ -42,5 +42,13 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 
+# --- Google Tink (pulled in by androidx.security:security-crypto) -------------
+# Tink's bytecode references errorprone annotations that exist only at compile
+# time; they are never resolved at runtime on Android.
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.lang.model.**
+-dontwarn com.google.api.client.**
+-dontwarn org.joda.time.**
+
 # --- Coroutines ---------------------------------------------------------------
 -dontwarn kotlinx.coroutines.debug.**
