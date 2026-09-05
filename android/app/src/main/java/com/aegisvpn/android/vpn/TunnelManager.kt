@@ -254,7 +254,7 @@ class TunnelManager(
             Log.i(TAG, "tunnel state: $state")
             machine.transition(VpnEvent.TunnelUp)
             publish()
-            startStatsLoop(tunnel.id)
+            startStatsLoop()
         } catch (e: Exception) {
             Log.e(TAG, "tunnel establishment failed", e)
             machine.transition(VpnEvent.ApiFailed("TUNNEL_FAILED", e.message))
@@ -286,8 +286,8 @@ class TunnelManager(
         }
         if (excluded.isNotEmpty()) {
             // Split tunneling (exclude mode) is an Interface-level property in
-            // this wireguard-android line: excludeApplications(String...).
-            interfaceBuilder.excludeApplications(*excluded.toTypedArray())
+            // this wireguard-android line: excludeApplications(Collection<String>).
+            interfaceBuilder.excludeApplications(excluded)
         }
         val peerBuilder = Peer.Builder()
             .parsePublicKey(tunnel.serverPublicKey)
@@ -302,7 +302,7 @@ class TunnelManager(
 
     // ---- stats / handshake detection ----
 
-    private fun startStatsLoop(tunnelId: String) {
+    private fun startStatsLoop() {
         statsJob?.cancel()
         statsJob = scope.launch {
             lastRx = 0L

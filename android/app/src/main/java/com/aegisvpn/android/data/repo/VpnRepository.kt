@@ -11,6 +11,7 @@ import com.aegisvpn.android.data.api.CreatePeerRequest
 import com.aegisvpn.android.data.api.PatchDeviceRequest
 import com.aegisvpn.android.data.api.RotatePeerRequest
 import com.aegisvpn.android.data.secure.TokenStore
+import com.aegisvpn.android.domain.Device
 import com.aegisvpn.android.domain.Plan
 import com.aegisvpn.android.domain.Server
 import com.aegisvpn.android.domain.Session
@@ -69,7 +70,7 @@ class VpnRepository(
     suspend fun devices(): List<DeviceSummary> =
         apiCall { api.devices() }.devices.map { it.toDomain() }
 
-    suspend fun renameDevice(id: String, name: String): DeviceSummary {
+    suspend fun renameDevice(id: String, name: String): Device {
         val dto = apiCall { api.renameDevice(id, PatchDeviceRequest(name)) }
         return dto.device.toDomain()
     }
