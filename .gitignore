@@ -32,3 +32,8 @@ backend/data/*.db
 # --- OS junk ---
 .DS_Store
 Thumbs.db
+
+# local runtime artifacts (real-api-matrix runs)
+backend/data/
+*.db-shm
+*.db-wal
