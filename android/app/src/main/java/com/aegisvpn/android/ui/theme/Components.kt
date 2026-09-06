@@ -75,8 +75,8 @@ fun StatusRing(
     hint: String,
     actionLabel: String,
     enabled: Boolean,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onClick: () -> Unit,
 ) {
     val aegis = LocalAegisColors.current
     val ringColor = when (state) {
