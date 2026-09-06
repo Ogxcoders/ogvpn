@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { aegis, emailError, passwordPolicyErrors, type AuthIdentity, type LoginResult } from '../lib/bridge';
+import { AlertIcon, ShieldIcon } from '../lib/icons';
 
 export function Login({ onAuthenticated }: { onAuthenticated: (i: AuthIdentity) => void }): React.ReactElement {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -38,37 +39,44 @@ export function Login({ onAuthenticated }: { onAuthenticated: (i: AuthIdentity) 
 
   return (
     <div className="auth-wrap">
-      <div className="card auth-card">
-        <h2 style={{ fontSize: 20, marginBottom: 4 }}>
-          {mode === 'login' ? 'Sign in to AegisVPN' : 'Create your account'}
-        </h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          The same account works on Android, desktop and the web control plane.
-        </p>
-        {formError ? <div className="banner" role="alert">{formError}</div> : null}
+      <div className="auth-card">
+        <div className="auth-brand">
+          <span className="brand-mark"><ShieldIcon size={44} /></span>
+          <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
+          <p>Private, fast and honest VPN protection</p>
+        </div>
+
+        {formError ? (
+          <div className="error-panel" role="alert">
+            <div className="title"><AlertIcon size={18} /> Sign-in failed</div>
+            <div>{formError}</div>
+            <div className="hint">Check your credentials and retry — or use demo mode below.</div>
+          </div>
+        ) : null}
+
         <form onSubmit={(e) => void submit(e)} noValidate>
           {mode === 'register' ? (
             <div className="field">
               <label htmlFor="auth-name">Name</label>
-              <input id="auth-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+              <input id="auth-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" aria-invalid={!!fieldErrors.name} />
               {fieldErrors.name ? <div className="field-error">{fieldErrors.name}</div> : null}
             </div>
           ) : null}
           <div className="field">
             <label htmlFor="auth-email">Email</label>
-            <input id="auth-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            <input id="auth-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" aria-invalid={!!fieldErrors.email} />
             {fieldErrors.email ? <div className="field-error">{fieldErrors.email}</div> : null}
           </div>
           <div className="field">
             <label htmlFor="auth-password">Password</label>
-            <input id="auth-password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
+            <input id="auth-password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={!!fieldErrors.password} />
             {fieldErrors.password ? <div className="field-error">{fieldErrors.password}</div> : null}
           </div>
           <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
             {busy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
-        <div className="muted" style={{ marginTop: 14, textAlign: 'center' }}>
+        <div className="muted mt-12" style={{ textAlign: 'center' }}>
           {mode === 'login' ? (
             <>No account yet? <a href="#" onClick={(e) => { e.preventDefault(); setMode('register'); setFieldErrors({}); }}>Create one</a></>
           ) : (
@@ -76,20 +84,19 @@ export function Login({ onAuthenticated }: { onAuthenticated: (i: AuthIdentity) 
           )}
         </div>
 
-        <hr style={{ border: 'none', borderTop: '1px solid var(--border, #2a2f3a)', margin: '16px 0' }} />
-        <button
-          className="btn btn-ghost"
-          type="button"
-          disabled={busy}
-          style={{ width: '100%' }}
-          onClick={() => void enterDemo()}
-        >
-          Explore demo mode (offline)
-        </button>
-        <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12, textAlign: 'center' }}>
-          Sample servers, devices and VPN states — no account, backend or
-          WireGuard tooling needed. The tunnel is simulated; no traffic is routed.
-        </p>
+        <div className="demo-card">
+          <h3>
+            <span className="demo-chip">DEMO</span>
+            Explore the full interface offline
+          </h3>
+          <p>
+            Sample servers, devices and VPN states — no account, backend or WireGuard tooling needed.
+            The tunnel is simulated; no traffic is routed.
+          </p>
+          <button className="btn" type="button" disabled={busy} style={{ width: '100%' }} onClick={() => void enterDemo()}>
+            Explore demo mode
+          </button>
+        </div>
       </div>
     </div>
   );

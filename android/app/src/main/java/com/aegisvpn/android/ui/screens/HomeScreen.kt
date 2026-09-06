@@ -1,7 +1,6 @@
 package com.aegisvpn.android.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +9,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,39 +36,48 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aegisvpn.android.data.demo.DemoMode
 import com.aegisvpn.android.data.repo.RepoError
 import com.aegisvpn.android.di.ServiceLocator
 import com.aegisvpn.android.domain.VpnState
-import com.aegisvpn.android.ui.theme.Amber
-import com.aegisvpn.android.ui.theme.Cyan
-import com.aegisvpn.android.ui.theme.Green
-import com.aegisvpn.android.ui.theme.Red
-import com.aegisvpn.android.ui.theme.TextMuted
+import com.aegisvpn.android.ui.theme.AegisCard
+import com.aegisvpn.android.ui.theme.AegisIconButton
+import com.aegisvpn.android.ui.theme.DemoBanner
+import com.aegisvpn.android.ui.theme.ErrorPanel
+import com.aegisvpn.android.ui.theme.LocalAegisColors
+import com.aegisvpn.android.ui.theme.RingState
+import com.aegisvpn.android.ui.theme.Spacing
+import com.aegisvpn.android.ui.theme.StatusRing
+import com.aegisvpn.android.ui.theme.StatePill
 import com.aegisvpn.android.vpn.TunnelManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Home screen. The state label comes VERBATIM from TunnelManager's state
- * machine — the UI never renders "Connected" unless the tunnel actually is.
+ * Home — the protection decision dominates this screen. The state label is
+ * rendered VERBATIM from TunnelManager's state machine: the UI never claims
+ * "Connected" unless the tunnel actually is. The primary action is the ring
+ * itself (228dp), reachable with one thumb; secondary navigation sits at the
+ * bottom where the thumb naturally rests.
  */
 @Composable
 fun HomeScreen(onOpenServers: () -> Unit, onOpenSettings: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val aegis = LocalAegisColors.current
     val state by ServiceLocator.tunnelManager.state.collectAsStateWithLifecycle()
     val session by ServiceLocator.tunnelManager.sessionInfo.collectAsStateWithLifecycle()
 
     var busy by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var selectedServerLabel by remember { mutableStateOf<String?>(null) }
+    var selectedServerStatus by remember { mutableStateOf<String?>(null) }
 
-    // Session duration ticker.
+    // Session duration ticker — a single text recomposes per second.
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -68,16 +86,15 @@ fun HomeScreen(onOpenServers: () -> Unit, onOpenSettings: () -> Unit) {
         }
     }
 
-    // Reflect the selected server when idle.
+    // Reflect the selected server while no tunnel is up.
     LaunchedEffect(state is VpnState.Idle, state is VpnState.Disconnected) {
         if (state is VpnState.Idle || state is VpnState.Disconnected) {
             val sid = ServiceLocator.vpnRepository.selectedServerId()
-            selectedServerLabel = if (sid != null) {
-                runCatching {
-                    val s = ServiceLocator.vpnRepository.server(sid)
-                    "${s.name} · ${s.city}, ${s.country}"
-                }.getOrNull()
-            } else null
+            val server = sid?.let { id ->
+                runCatching { ServiceLocator.vpnRepository.server(id) }.getOrNull()
+            }
+            selectedServerLabel = server?.let { "${it.name} · ${it.city}, ${it.country}" }
+            selectedServerStatus = server?.status
         }
     }
 
@@ -89,38 +106,79 @@ fun HomeScreen(onOpenServers: () -> Unit, onOpenSettings: () -> Unit) {
     val failed = state is VpnState.Error || state is VpnState.ServerUnavailable ||
         state is VpnState.ConfigurationError
 
-    val ringColor = when {
-        connected -> Green
-        inFlight -> Amber
-        failed -> Red
-        else -> TextMuted
+    val ring: RingState = when (state) {
+        is VpnState.Connected -> RingState.PROTECTED
+        is VpnState.Reconnecting -> RingState.RECOVERING
+        is VpnState.Disconnecting -> RingState.DISCONNECTING
+        is VpnState.Offline -> RingState.OFFLINE
+        is VpnState.Error, is VpnState.ServerUnavailable, is VpnState.ConfigurationError -> RingState.FAILED
+        is VpnState.Preparing, is VpnState.Authorizing, is VpnState.Configuring,
+        is VpnState.Connecting, is VpnState.Handshaking,
+        -> RingState.CONNECTING
+        else -> RingState.RESTING
     }
 
-    Column(
+    val headline = TunnelManager.stateLabel(state)
+    val hint = stateHint(state)
+    val actionLabel = when {
+        connected -> "Disconnect VPN"
+        inFlight -> "Connection in progress"
+        else -> "Connect VPN"
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .background(
+                Brush.verticalGradient(
+                    0f to MaterialTheme.colorScheme.background,
+                    1f to MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                ),
+            ),
     ) {
-        Spacer(Modifier.height(12.dp))
-        StateBadge(state)
-        Spacer(Modifier.height(24.dp))
-
-        val label = when {
-            connected -> "Disconnect"
-            inFlight -> "…"
-            else -> "Connect"
-        }
-        Box(
+        Column(
             modifier = Modifier
-                .size(170.dp)
-                .background(Color.Transparent, RoundedCornerShape(50))
-                .border(4.dp, ringColor, RoundedCornerShape(50))
-                .semantics { contentDescription = if (connected) "Disconnect VPN" else "Connect VPN" },
-            contentAlignment = Alignment.Center,
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.xl)
+                .padding(top = Spacing.md)
+                .statusBarsPadding(),
         ) {
-            Button(
-                onClick = {
+            // ---------- Header: brand + settings ----------
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("AegisVPN", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        if (DemoMode.enabled) "Offline demo" else "WireGuard tunnel",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                AegisIconButton(
+                    icon = Icons.Rounded.Settings,
+                    label = "Open settings",
+                    onClick = onOpenSettings,
+                )
+            }
+
+            if (DemoMode.enabled) {
+                Spacer(Modifier.height(Spacing.md))
+                DemoBanner()
+            }
+
+            // ---------- Protection status (dominant) ----------
+            Spacer(Modifier.height(Spacing.xl))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                StatusRing(
+                    state = ring,
+                    headline = headline,
+                    hint = hint,
+                    actionLabel = actionLabel,
+                    enabled = !busy && !inFlight,
+                ) {
                     scope.launch {
                         busy = true
                         errorText = null
@@ -133,7 +191,7 @@ fun HomeScreen(onOpenServers: () -> Unit, onOpenSettings: () -> Unit) {
                                         .filter { it.status == "active" }
                                         .minByOrNull { it.loadPct }
                                         ?.id
-                                    ?: throw RepoError.Network(java.io.IOException("no servers"))
+                                    ?: throw RepoError.Network(java.io.IOException("No active server available — check your connection and retry."))
                                 ServiceLocator.vpnRepository.selectServer(serverId)
                                 ServiceLocator.tunnelManager.connect(serverId)?.let { consent ->
                                     // MainActivity observes this via snapshotFlow.
@@ -143,71 +201,178 @@ fun HomeScreen(onOpenServers: () -> Unit, onOpenSettings: () -> Unit) {
                         } catch (e: RepoError) {
                             errorText = e.message
                         } catch (e: Exception) {
-                            errorText = "Connect failed: ${e.message}"
+                            errorText = "Connect failed: ${e.message}. Check your network, then tap Try again."
                         } finally {
                             busy = false
                         }
                     }
-                },
-                enabled = !busy && !inFlight,
-            ) {
-                Text(label, fontSize = 18.sp)
+                }
             }
-        }
 
-        Spacer(Modifier.height(24.dp))
-        errorText?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("Server", style = MaterialTheme.typography.labelMedium, color = TextMuted)
-                Text(
-                    session?.serverLabel ?: selectedServerLabel ?: "—",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("IP (tunnel)", style = MaterialTheme.typography.labelMedium, color = TextMuted)
-                Text(session?.addressV4 ?: "—", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(8.dp))
-                Text("Duration", style = MaterialTheme.typography.labelMedium, color = TextMuted)
-                Text(
-                    if (connected && session != null) formatDuration(nowMs - session!!.connectedSinceMs) else "—",
-                    style = MaterialTheme.typography.bodyMedium,
+            // ---------- Error panel (what happened + next safe action) ----------
+            if (failed) {
+                Spacer(Modifier.height(Spacing.lg))
+                ErrorPanel(
+                    message = stateErrorMessage(state),
+                    suggestion = stateErrorSuggestion(state),
+                    onRetry = {
+                        scope.launch {
+                            val serverId = ServiceLocator.vpnRepository.selectedServerId() ?: return@launch
+                            ServiceLocator.tunnelManager.connect(serverId)?.let { consent ->
+                                vpnConsentEmitter.value = consent to serverId
+                            }
+                        }
+                    },
                 )
             }
-        }
 
-        Spacer(Modifier.height(14.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onOpenServers, modifier = Modifier.weight(1f)) { Text("Choose server") }
-            Button(onClick = onOpenSettings, modifier = Modifier.weight(1f)) { Text("Settings") }
+            // ---------- Server card (subordinate to the decision) ----------
+            Spacer(Modifier.height(Spacing.lg))
+            AegisCard {
+                Column(Modifier.padding(Spacing.lg)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Place,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            if (connected || inFlight) "Connected server" else "Selected server",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        selectedServerStatus?.let { status ->
+                            if (!connected && !inFlight) {
+                                StatePill(
+                                    text = status,
+                                    color = when (status) {
+                                        "active" -> aegis.success
+                                        "maintenance", "drain" -> aegis.warning
+                                        else -> aegis.danger
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        session?.serverLabel ?: selectedServerLabel ?: "No server selected yet",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(Spacing.md))
+                    Row(Modifier.fillMaxWidth()) {
+                        MetricColumn(
+                            label = "Tunnel IP",
+                            value = session?.addressV4 ?: "—",
+                            modifier = Modifier.weight(1f),
+                        )
+                        MetricColumn(
+                            label = "Session",
+                            value = if (connected && session != null) {
+                                formatDuration(nowMs - session!!.connectedSinceMs)
+                            } else {
+                                "—"
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                        MetricColumn(
+                            label = "Protocol",
+                            value = "WireGuard",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            // ---------- Bottom navigation (one-thumb reach) ----------
+            Spacer(Modifier.height(Spacing.lg))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Button(
+                    onClick = onOpenServers,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Rounded.Place, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text("Choose server")
+                }
+                OutlinedButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                ) {
+                    Icon(Icons.Rounded.Settings, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text("Settings")
+                }
+            }
+            Spacer(Modifier.height(Spacing.md))
+            Spacer(Modifier.navigationBarsPadding())
         }
     }
 }
 
 @Composable
-private fun StateBadge(state: VpnState) {
-    val label = TunnelManager.stateLabel(state)
-    val color = when (state) {
-        is VpnState.Connected -> Green
-        is VpnState.Error, is VpnState.ServerUnavailable, is VpnState.ConfigurationError -> Red
-        is VpnState.Reconnecting, is VpnState.Connecting, is VpnState.Handshaking,
-        is VpnState.Preparing, is VpnState.Authorizing, is VpnState.Configuring,
-        is VpnState.Disconnecting, is VpnState.Offline,
-        -> Amber
-        else -> TextMuted
-    }
-    Box(
-        modifier = Modifier
-            .background(color.copy(alpha = 0.15f), RoundedCornerShape(50))
-            .border(1.dp, color, RoundedCornerShape(50))
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+private fun MetricColumn(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .semantics { contentDescription = "$label: $value" },
     ) {
-        Text(label, color = color, fontSize = 13.sp)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+        )
     }
+}
+
+private fun stateHint(state: VpnState): String = when (state) {
+    is VpnState.Connected -> "Your traffic is protected"
+    is VpnState.Preparing -> "Preparing the VPN service…"
+    is VpnState.Authorizing -> "Verifying your account…"
+    is VpnState.Configuring -> "Building the tunnel configuration…"
+    is VpnState.Connecting -> "Establishing secure tunnel…"
+    is VpnState.Handshaking -> "Exchanging encryption keys…"
+    is VpnState.Reconnecting -> "Connection lost — recovering…"
+    is VpnState.Disconnecting -> "Closing the tunnel…"
+    is VpnState.Idle -> "Tap to connect and protect your traffic"
+    is VpnState.Disconnected -> "Tap to connect and protect your traffic"
+    is VpnState.Offline -> "No network — reconnect when you are back online"
+    is VpnState.AuthRequired -> "Sign in to continue"
+    is VpnState.VpnPermissionRequired -> "Allow the VPN permission to connect"
+    is VpnState.ServerUnavailable -> "Pick another server to continue"
+    is VpnState.ConfigurationError -> "Reconnect to rebuild the configuration"
+    is VpnState.Error -> "Tap the ring to try again"
+}
+
+private fun stateErrorMessage(state: VpnState): String = when (state) {
+    is VpnState.Error -> state.message ?: "The tunnel reported an error."
+    is VpnState.ServerUnavailable -> "The selected server is not accepting connections right now."
+    is VpnState.ConfigurationError -> "The tunnel configuration could not be applied."
+    else -> "An unknown error occurred."
+}
+
+private fun stateErrorSuggestion(state: VpnState): String = when (state) {
+    is VpnState.ServerUnavailable -> "Choose a different active server, then tap Try again."
+    is VpnState.ConfigurationError -> "Tap Try again to rebuild the tunnel configuration."
+    is VpnState.Error -> "Check your network connection, then tap Try again."
+    else -> "Tap Try again, or pick a different server."
 }
 
 private fun formatDuration(ms: Long): String {

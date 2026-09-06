@@ -1,19 +1,29 @@
 package com.aegisvpn.android.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,15 +38,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.aegisvpn.android.data.demo.DemoMode
 import com.aegisvpn.android.data.repo.RepoError
 import com.aegisvpn.android.di.ServiceLocator
 import com.aegisvpn.android.domain.DeviceSummary
+import com.aegisvpn.android.ui.theme.AegisCard
+import com.aegisvpn.android.ui.theme.AegisIconButton
+import com.aegisvpn.android.ui.theme.DemoBanner
+import com.aegisvpn.android.ui.theme.ErrorPanel
+import com.aegisvpn.android.ui.theme.LocalAegisColors
+import com.aegisvpn.android.ui.theme.SkeletonListCard
+import com.aegisvpn.android.ui.theme.Spacing
+import com.aegisvpn.android.ui.theme.StatePill
 import kotlinx.coroutines.launch
 
-/** Device management: list, rename, revoke (mirrors web control plane state). */
+/**
+ * Device management: list, rename, revoke (mirrors web control plane state).
+ * Destructive actions are confirmed with clear consequence text; session
+ * state is conveyed by pill + text, never color alone.
+ */
 @Composable
 fun DevicesScreen(onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val aegis = LocalAegisColors.current
     var devices by remember { mutableStateOf<List<DeviceSummary>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<DeviceSummary?>(null) }
@@ -56,66 +80,76 @@ fun DevicesScreen(onClose: () -> Unit) {
 
     LaunchedEffect(Unit) { load() }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Your devices", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(10.dp))
+    Column(
+        Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = Spacing.xl),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = Spacing.md),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Devices", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    "Revoke anything you don't recognize — it disconnects immediately",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            AegisIconButton(icon = Icons.Rounded.Check, label = "Done — back to settings", onClick = onClose)
+        }
+        if (DemoMode.enabled) {
+            Spacer(Modifier.height(Spacing.md))
+            DemoBanner()
+        }
+        Spacer(Modifier.height(Spacing.lg))
 
         when {
             error != null -> {
-                Text(error!!, color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = { error = null; load() }) { Text("Retry") }
+                ErrorPanel(
+                    message = error!!,
+                    suggestion = "Check your connection, then reload your devices.",
+                    onRetry = { error = null; load() },
+                )
             }
-            devices == null -> CircularProgressIndicator()
-            devices!!.isEmpty() -> Text("No devices registered yet.")
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(devices!!, key = { it.id }) { device ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(14.dp)) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(device.name, style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        "${device.platform} · last active ${device.lastActiveAt ?: "never"}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                val sessionState = device.session?.state
-                                if (sessionState != null) {
-                                    Text(
-                                        sessionState,
-                                        color = if (sessionState == "connected") {
-                                            MaterialTheme.colorScheme.tertiary
-                                        } else {
-                                            MaterialTheme.colorScheme.secondary
-                                        },
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                } else {
-                                    Text(
-                                        "offline",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { renaming = device; renameValue = device.name }) {
-                                    Text("Rename")
-                                }
-                                TextButton(onClick = { revoking = device }) {
-                                    Text("Revoke", color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        }
-                    }
+            devices == null -> {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    repeat(3) { SkeletonListCard() }
                 }
             }
-        }
-        Spacer(Modifier.height(10.dp))
-        TextButton(onClick = onClose, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("Done")
+            devices!!.isEmpty() -> {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = Spacing.xxxl),
+                ) {
+                    Text("No devices yet", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(Spacing.sm))
+                    Text(
+                        "This device will appear here automatically after your first connection.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            else -> {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    items(devices!!, key = { it.id }) { device ->
+                        DeviceRow(
+                            device = device,
+                            onRename = { renaming = device; renameValue = device.name },
+                            onRevoke = { revoking = device },
+                        )
+                    }
+                    item { Spacer(Modifier.height(Spacing.xl)) }
+                }
+            }
         }
     }
 
@@ -129,6 +163,7 @@ fun DevicesScreen(onClose: () -> Unit) {
                     onValueChange = { renameValue = it },
                     label = { Text("Device name") },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                 )
             },
             confirmButton = {
@@ -181,9 +216,72 @@ fun DevicesScreen(onClose: () -> Unit) {
                             }
                         }
                     },
-                ) { Text("Revoke device", color = MaterialTheme.colorScheme.error) }
+                ) { Text("Revoke device", color = aegis.danger) }
             },
             dismissButton = { TextButton(onClick = { revoking = null }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun DeviceRow(
+    device: DeviceSummary,
+    onRename: () -> Unit,
+    onRevoke: () -> Unit,
+) {
+    val aegis = LocalAegisColors.current
+    val sessionState = device.session?.state
+    AegisCard {
+        Column(Modifier.padding(Spacing.lg)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Spacer(Modifier.size(Spacing.md))
+                Column(Modifier.weight(1f)) {
+                    Text(device.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${device.platform} · last active ${device.lastActiveAt ?: "never"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                when (sessionState) {
+                    null -> StatePill("offline", MaterialTheme.colorScheme.onSurfaceVariant)
+                    "connected" -> StatePill("connected", aegis.success)
+                    else -> StatePill(sessionState, aegis.warning)
+                }
+            }
+            Spacer(Modifier.height(Spacing.md))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                // 48dp-labeled text actions.
+                TextButton(
+                    onClick = onRename,
+                    modifier = Modifier.heightIn(min = 44.dp),
+                ) {
+                    Icon(Icons.Rounded.Edit, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Rename")
+                }
+                TextButton(
+                    onClick = onRevoke,
+                    modifier = Modifier.heightIn(min = 44.dp),
+                ) {
+                    Icon(Icons.Rounded.Delete, null, tint = aegis.danger, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Revoke", color = aegis.danger)
+                }
+            }
+        }
     }
 }

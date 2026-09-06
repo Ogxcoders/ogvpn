@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
@@ -23,6 +24,20 @@ import com.aegisvpn.android.ui.screens.ServersScreen
 import com.aegisvpn.android.ui.screens.SettingsScreen
 import com.aegisvpn.android.ui.screens.VpnConsentBridge
 import com.aegisvpn.android.ui.theme.AegisTheme
+import com.aegisvpn.android.ui.screens.BrandMark
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Text
+import com.aegisvpn.android.ui.theme.Spacing
 import com.aegisvpn.android.vpn.TunnelManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +69,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge-to-edge: the app draws behind system bars; screens apply
+        // statusBars/navigationBars padding explicitly (safe-area rule).
+        enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
 
         vpnPermissionLauncher =
@@ -105,7 +123,22 @@ class MainActivity : ComponentActivity() {
             AegisTheme {
                 val loggedInState by loggedIn.collectAsState()
                 when (loggedInState) {
-                    null -> Unit // splash: resolving session
+                    null -> {
+                        // Branded splash while the session is resolving —
+                        // intentional placeholder, not a dead screen.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                BrandMark(modifier = Modifier.size(72.dp))
+                                Spacer(Modifier.height(16.dp))
+                                Text("AegisVPN", style = MaterialTheme.typography.titleLarge)
+                            }
+                        }
+                    }
                     else -> {
                         val nav = rememberNavController()
                         NavHost(nav, startDestination = if (loggedInState == true) "home" else "login") {
